@@ -2,7 +2,7 @@
 
 Connect a chosen thread by pasting its UUID or an original `codex://threads/UUID` link into the companion's Codex connection field. The monitor asks the local daemon for that thread's metadata every 2.5 seconds. The title comes from the thread name when available. The companion builds a **Jump in** desktop link from the thread UUID and accepts an optional corresponding web address in Manage sessions.
 
-From the repository root, the same monitor can run on its own.
+From the `mac/` directory, the same monitor can run on its own.
 
 ```sh
 /usr/bin/python3 Adapters/Codex/monitor.py 'codex://threads/YOUR-THREAD-UUID'
@@ -29,7 +29,7 @@ On November 21, 2026, the installed standalone CLI and running App Server both r
 | Questions and approvals | A disposable 0.171.0 App Server with a loopback model replayed an outstanding multiple-choice question to a second client. The selected answer reached its original tool call. In two further sessions the client approved a one-time `pwd` request and denied the same request. Codex ran the approved command and stopped the denied turn. |
 | Open session and results | The installed desktop bundle registers the Codex URL scheme. A user-supplied original link is retained verbatim in canonical UUID form. Native navigation to a synthetic desktop thread and direct result opening remain unverified. |
 
-Repeat the local test from the repository root while the daemon is running.
+Repeat the local test from the `mac/` directory while the daemon is running.
 
 ```sh
 /usr/bin/python3 -B Adapters/Codex/verify.py
@@ -39,7 +39,7 @@ The test opens a disposable thread, runs the fixed command `/bin/sleep 5` and ex
 
 ## Protocol and scope
 
-Opening the session library pages through `thread/list` on the local Unix socket. The library retains thread IDs, titles and update times in memory. Each pinned monitor polls `thread/read`, looks up the latest turn with `thread/turns/list`, and requests a limited descending page from `thread/items/list` for that turn. The card uses a short excerpt from a visible agent update or a description of a file, command or search event. Reasoning, raw commands and tool output are excluded from the displayed sentence. The picker polls loaded, account-visible threads while open. The info button uses the configured model and effort from the thread and the locally recorded token count for that ID. Missing values stay unreported. Only the resulting snapshot is persisted. Older daemons and ephemeral sessions fall back to the available title and state. [OpenAI App Server guide](https://developers.openai.com/codex/app-server/)
+Opening the session library pages through `thread/list` on the local Unix socket. The library retains thread IDs, titles and update times in memory. Each pinned monitor polls `thread/read`, looks up the latest turn with `thread/turns/list`, and requests a limited descending page from `thread/items/list` for that turn. The card uses a short excerpt from a visible agent update or a description of a file, command or search event. Reasoning, raw commands and tool output are excluded from the displayed sentence. The picker polls loaded, account-visible threads while open. The info button uses the configured model and effort from the thread and reads account usage percentages on demand. Missing values stay unreported. Only the resulting snapshot is persisted. Older daemons and ephemeral sessions fall back to the available title and state. [OpenAI App Server guide](https://developers.openai.com/codex/app-server/)
 
 When a pinned thread is active, its monitor rejoins the thread on the same local connection to receive pending and newly issued App Server requests. Questions show the provider's options and accept a written answer when available. One-time command approvals show the command, working directory, and available decisions. Codex can offer a denial that stops the turn. The tile labels that choice explicitly. A selection applies to the original request on its owning connection. Resolving it from the original session also clears it from the tile.
 

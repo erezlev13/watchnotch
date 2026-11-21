@@ -1,8 +1,9 @@
 import unittest
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
-from monitor import activity, branch_items, read_snapshot, thread_tokens
+from adapters.codex_client import activity, branch_items, read_snapshot
 
 
 class Server:
@@ -79,22 +80,12 @@ class ProgressTest(unittest.TestCase):
         s.turn = "completed"
         self.assertEqual(read_snapshot(s, "sample", cache=cache)["sentence"], "Work on this request has finished.")
 
-    def test_live_gist_and_session_usage(self):
+    def test_live_gist(self):
         self.assertEqual(activity({"type": "agentMessage", "text": "Okay! I’m checking the Windows build."}), "I’m checking the Windows build.")
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            db = sqlite3.connect(root / "state_5.sqlite")
-            db.execute("CREATE TABLE threads(id, tokens_used)")
-            db.executemany("INSERT INTO threads VALUES(?,?)", [("one", 2345), ("two", 913), ("new", 0)])
-            db.commit()
-            db.close()
-            self.assertEqual(thread_tokens("one", root), 2345)
-            self.assertIsNone(thread_tokens("absent", root))
-            self.assertIsNone(thread_tokens("new", root))
 
 class ReplyTest(unittest.TestCase):
     def test_replies_bound_to_each_selected_session(self):
-        from monitor import send_reply
+        from adapters.codex_client import send_reply
         calls = []
         class Local:
             def call(self, method, params):
@@ -108,7 +99,7 @@ class ReplyTest(unittest.TestCase):
         self.assertEqual(calls, [("first","A"),("second","B")])
 
     def test_waiting_and_ambiguous_delivery(self):
-        from monitor import send_reply
+        from adapters.codex_client import send_reply
         class Local:
             calls = 0
             flags = ["waitingOnApproval"]
@@ -170,7 +161,7 @@ class BranchTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            with sqlite3.connect(root / "state_5.sqlite") as db:
+            with closing(sqlite3.connect(root / "state_5.sqlite")) as db, db:
                 db.execute("CREATE TABLE thread_spawn_edges(parent_thread_id, child_thread_id)")
                 # A stale edge to an unrelated worker must be rejected by its authoritative thread/read.
                 db.executemany("INSERT INTO thread_spawn_edges VALUES(?, ?)",
@@ -196,6 +187,6 @@ class BranchTest(unittest.TestCase):
             self.assertEqual([method for method, _ in calls], ["thread/list"])
 
     def test_complete_sentence_survives_past_old_character_limit(self):
-        from monitor import message_gist
+        from adapters.codex_client import message_gist
         sentence = "The Windows build now applies the display fix after the monitor reconnects and keeps every pinned session on the correct screen."
         self.assertEqual(message_gist("Yes. " + sentence + " More information follows."), sentence)

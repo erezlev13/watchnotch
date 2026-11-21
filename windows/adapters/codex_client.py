@@ -1,105 +1,46 @@
-#!/usr/bin/env python3
-"""Publish a single user-selected Codex thread through the local App Server."""
-import argparse
+"""Codex App Server connection, replies and progress for the Windows companion."""
+from contextlib import closing
+import sqlite3
 import base64
 import hashlib
-from contextlib import closing, contextmanager
-from datetime import datetime, timezone
-import fcntl
 import json
 import os
+from pathlib import Path
 import re
 import shlex
-from pathlib import Path
-import socket
-import sqlite3
-import stat
 import struct
-import signal
-import sys
-import tempfile
 import time
 import uuid
-
-# The bundled application launches this file with Python's isolated path mode.
-sys.dont_write_bytecode = True
-if sys.flags.isolated:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-from requests_bridge import LiveRequests, take_decision
-
-
-def thread_id(value):
-    prefix = "codex://threads/"
-    key = value[len(prefix):] if value.startswith(prefix) else value
-    try:
-        return str(uuid.UUID(key))
-    except ValueError:
-        raise argparse.ArgumentTypeError("Enter a Codex thread UUID or codex://threads/UUID link.")
-
-
-def default_directory():
-    return Path(os.environ.get("NOTCH_SESSION_DIR") or
-                Path.home() / "Library/Application Support/Mac Notch Session Companion/Sessions")
-
-
-def default_socket():
-    config = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
-    return config / "app-server-control/app-server-control.sock"
 
 
 class RPCRejected(RuntimeError):
     pass
 
 
-class Server:
-    """JSON-RPC over the local Codex Unix WebSocket control endpoint."""
-    def __init__(self, path=None, interactions=None):
-        self.path = path or default_socket()
-        self.interactions = interactions
-
-    def __enter__(self):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.settimeout(8)
-        self.reader = self.sock.makefile("rb")
+class Client:
+    def initialize(self):
         self.next_id = 1
-        try:
-            # Codex publishes a symlink into its per-user daemon directory.
-            endpoint = Path(self.path).resolve(strict=True)
-            info = endpoint.stat()
-            if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
-                raise PermissionError("Expected a Codex socket owned by the current user.")
-            self.sock.connect(str(endpoint))
-            nonce = base64.b64encode(os.urandom(16)).decode()
-            self.sock.sendall(("GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
-                "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
-                f"Sec-WebSocket-Key: {nonce}\r\n\r\n").encode())
-            status_line = self.reader.readline(1024)
-            if status_line.split()[1:2] != [b"101"]:
-                raise ConnectionError("The Codex socket declined the WebSocket connection.")
-            headers = {}
-            for _ in range(64):
-                line = self.reader.readline(8192)
-                if line == b"\r\n":
-                    break
-                name, _, value = line.partition(b":")
-                headers[name.lower()] = value.strip()
-            signature = nonce + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-            expected = base64.b64encode(hashlib.sha1(signature.encode()).digest())
-            if headers.get(b"sec-websocket-accept") != expected:
-                raise ConnectionError("Invalid WebSocket upgrade response.")
-            init = {"clientInfo": {"name": "notch_companion", "title": "Mac Notch Session Companion", "version": "1.0"}}
-            if self.interactions:
-                init["capabilities"] = {"experimentalApi": True, "requiredHumanApproval": True}
-            self.call("initialize", init)
-            self.send_frame(1, b'{"method":"initialized","params":{}}')
-        except BaseException:
-            self.__exit__(None, None, None)
-            raise
-        return self
-
-    def __exit__(self, *args):
-        self.reader.close()
-        self.sock.close()
+        nonce = base64.b64encode(os.urandom(16)).decode()
+        self.send_bytes(("GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
+            "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+            f"Sec-WebSocket-Key: {nonce}\r\n\r\n").encode())
+        status_line = self.reader.readline(1024)
+        if status_line.split()[1:2] != [b"101"]:
+            raise ConnectionError("The Codex socket declined the WebSocket connection.")
+        headers = {}
+        for _ in range(64):
+            line = self.reader.readline(8192)
+            if line == b"\r\n":
+                break
+            name, _, value = line.partition(b":")
+            headers[name.lower()] = value.strip()
+        signature = nonce + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        expected = base64.b64encode(hashlib.sha1(signature.encode()).digest())
+        if headers.get(b"sec-websocket-accept") != expected:
+            raise ConnectionError("Invalid WebSocket upgrade response.")
+        self.call("initialize", {"clientInfo": {"name": "notch_companion",
+                  "title": "watchnotch", "version": "1.0"}})
+        self.send_frame(1, b'{"method":"initialized","params":{}}')
 
     def send_frame(self, opcode, payload):
         size = len(payload)
@@ -111,7 +52,7 @@ class Server:
             length = b"\xff" + struct.pack("!Q", size)
         mask = os.urandom(4)
         masked = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
-        self.sock.sendall(bytes([0x80 | opcode]) + length + mask + masked)
+        self.send_bytes(bytes([0x80 | opcode]) + length + mask + masked)
 
     def read_exact(self, count):
         data = self.reader.read(count)
@@ -147,8 +88,6 @@ class Server:
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
             message = self.read_message()
-            if self.interactions and "method" in message:
-                self.interactions.receive(message)
             if message.get("id") == key and "method" not in message:
                 if "error" in message:
                     raise RPCRejected(f"{method} failed (RPC {message['error'].get('code')}).")
@@ -288,33 +227,18 @@ def activity(item):
 
 def recent_progress(server, key, cache):
     turn = None
-    live = getattr(server, "interactions", None)
     try:
         turns = server.call("thread/turns/list", {"threadId": key, "limit": 1,
                             "sortDirection": "desc", "itemsView": "notLoaded"})["data"]
         if not turns:
-            if live:
-                live.reset_history()
             return None, ""
         turn = turns[0]
         cache_key = (turn["id"], turn["status"])
         page = server.call("thread/items/list", {"threadId": key, "turnId": turn["id"], "limit": 12,
                            "sortDirection": "desc", "deferOutput": {}})
     except RuntimeError:
-        if live:
-            live.reset_history()
         return (turn["status"], cache.get(cache_key, "")) if turn else (None, "")
     items = [entry.get("item") or {} for entry in page["data"] if entry.get("turnId") == turn["id"]]
-    if live:
-        def older_pages():
-            cursor, seen = page.get("nextCursor"), set()
-            while cursor and cursor not in seen:
-                seen.add(cursor)
-                old = server.call("thread/items/list", {"threadId": key, "turnId": turn["id"], "cursor": cursor,
-                                  "limit": 100, "sortDirection": "desc", "deferOutput": {}})
-                yield [entry.get("item") or {} for entry in old["data"] if entry.get("turnId") == turn["id"]]
-                cursor = old.get("nextCursor")
-        live.observe_items(turn["id"], turn["status"], items, older_pages)
     completed = turn["status"] == "completed"
     if completed:
         items.sort(key=lambda item: item.get("type") == "agentMessage" and item.get("phase") == "final_answer", reverse=True)
@@ -339,21 +263,6 @@ def recent_progress(server, key, cache):
     return turn["status"], cache.get(cache_key, "")
 
 
-def thread_tokens(key, directory=None):
-    root = directory or Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
-    path = root / "state_5.sqlite"
-    try:
-        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=0.1)) as db:
-            db.execute("PRAGMA trusted_schema=OFF")
-            row = db.execute("SELECT tokens_used FROM threads WHERE id = ?", (key,)).fetchone()
-            # Zero is the store's default before usage has been recorded.
-            if row and type(row[0]) is int and row[0] > 0:
-                return row[0]
-    except (sqlite3.Error, ValueError):
-        pass
-    return None
-
-
 def read_snapshot(server, key, link=None, cache=None):
     try:
         thread = server.call("thread/read", {"threadId": key, "includeTurns": False})["thread"]
@@ -361,20 +270,6 @@ def read_snapshot(server, key, link=None, cache=None):
         raise RuntimeError(f"The local Codex daemon could not read this thread ({error}).") from error
     if thread["id"] != key:
         raise RuntimeError("Codex returned a different thread identity.")
-    live = getattr(server, "interactions", None)
-    runtime = thread["status"]["type"]
-    if live and runtime == "active" and not live.subscribed:
-        # Rejoin an already running pinned thread to receive the actual callbacks.
-        # Do not load a sleeping thread or supply any settings overrides.
-        try:
-            resumed = server.call("thread/resume", {"threadId": key, "excludeTurns": True})
-            if resumed["thread"]["id"] != key:
-                raise RuntimeError("Codex resumed a different thread.")
-        except RPCRejected:
-            pass  # Some daemons cannot resume ephemeral threads; retain item-based observation.
-        live.subscribed = True
-    elif live and runtime == "notLoaded":
-        live.subscribed = False
     state, sentence = status(thread)
     title = short_text(thread.get("name"), None) or "Codex session"
     last, line = recent_progress(server, key, cache if cache is not None else {})
@@ -396,82 +291,10 @@ def read_snapshot(server, key, link=None, cache=None):
         sentence += "."
     result = {"provider": "Codex", "sessionID": key, "title": title,
               "state": state, "sentence": sentence}
-    result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort"),
-                         "tokens": thread_tokens(key)}
-    if live:
-        live.decorate(result, runtime, last)
+    result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort")}
     if link:
         result["sessionURL"] = link
     return result
-
-
-def publish(path, snapshot):
-    snapshot = dict(snapshot, updatedAt=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as f:
-        try:
-            json.dump(snapshot, f)
-            f.flush()
-            os.replace(f.name, path)
-        finally:
-            Path(f.name).unlink(missing_ok=True)
-
-
-@contextmanager
-def session_lock(path):
-    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
-    fd = os.open(path.with_suffix(".lock"), flags, 0o600)
-    with os.fdopen(fd, "r+b") as handle:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
-            raise PermissionError("Expected a regular monitor lock owned by the current user.")
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("Another monitor is already watching this thread.")
-        yield
-
-
-def watch(key, link, socket, directory):
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path = directory / f"codex-{key}.json"
-    previous = None
-    cache = {}
-    with session_lock(path):
-        try:
-            while True:
-                try:
-                    live = LiveRequests(key)
-                    with Server(socket, live) as server:
-                        while True:
-                            current = read_snapshot(server, key, link, cache)
-                            decision = take_decision(path)
-                            if decision:
-                                try:
-                                    live.respond(server, decision)
-                                except RPCRejected:
-                                    live.feedback = "Codex declined this selection. Open the session to review it."
-                                current = read_snapshot(server, key, link, cache)
-                            if current != previous:
-                                publish(path, current)
-                                previous = current
-                            time.sleep(2.5)
-                except (RuntimeError, OSError, ValueError) as error:
-                    if previous is None:
-                        raise
-                    offline = dict(previous, state="unavailable")
-                    offline.pop("request", None)
-                    if live.sent and "request" in previous:
-                        offline["sentence"] = "The connection closed. Open the session to check your selection."
-                    if offline != previous:
-                        publish(path, offline)
-                        previous = offline
-                    print(f"Codex connection unavailable: {error}", file=sys.stderr, flush=True)
-                    time.sleep(3)
-        finally:
-            if previous and previous["state"] != "unavailable":
-                offline = dict(previous, state="unavailable")
-                offline.pop("request", None)
-                publish(path, offline)
 
 
 BRANCH_SOURCES = ["cli", "vscode", "appServer", "exec", "subAgent", "subAgentThreadSpawn", "unknown"]
@@ -574,72 +397,21 @@ def send_reply(server, key, text):
         return "uncertain"
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--active-agents-only", action="store_true", help="Skip historical fork discovery")
-    parser.add_argument("--branches", nargs="+", type=thread_id, help="List direct forks and subagents for the selected parent IDs")
-    parser.add_argument("--reply", action="store_true", help="Send standard input to the specified existing thread")
-    parser.add_argument("--list", action="store_true", help="List a page of thread titles and IDs")
-    parser.add_argument("--loaded", action="store_true", help="List activity for loaded sessions in the current account")
-    parser.add_argument("--cursor", help="Continue a thread listing")
-    parser.add_argument("session", nargs="?", help="Desktop thread link or UUID")
-    parser.add_argument("--socket", type=Path, help="Optional App Server control socket")
-    args = parser.parse_args()
-    if args.branches:
-        with Server(args.socket) as server:
-            print(json.dumps({"items": branch_items(server, set(args.branches), include_forks=not args.active_agents_only)}))
-        return 0
-    if args.list or args.loaded:
-        params = {"limit": 60, "currentAccountOnly": True}
-        if args.cursor:
-            params["cursor"] = args.cursor
-        with Server(args.socket) as server:
-            if args.loaded:
-                loaded = server.call("thread/loaded/list", {"limit": 100, "cursor": args.cursor})
-                rows = server.call("thread/list", {"currentAccountOnly": True, "limit": 100,
-                                   "includedThreadIds": loaded["data"]})["data"] if loaded["data"] else []
-                page = {"data": rows, "nextCursor": loaded.get("nextCursor")}
-            else:
-                page = server.call("thread/list", params)
-        items = []
-        for row in page["data"]:
-            key = str(uuid.UUID(row["id"]))
-            name = " ".join((row.get("name") or "").split())[:120]
-            items.append({"provider": "Codex", "sessionID": key, "title": name or ("Thread " + key[:8]),
-                          "updated": row.get("updatedAt") or 0, "state": status(row)[0] if row.get("status") else None})
-        print(json.dumps({"items": items, "next": page.get("nextCursor")}))
-        return 0
-    if not args.session:
-        parser.error("A thread ID is required.")
-    try:
-        key = thread_id(args.session)
-    except argparse.ArgumentTypeError as error:
-        parser.error(str(error))
-    if args.reply:
-        try:
-            data = sys.stdin.buffer.read(65537)
-            with Server(args.socket) as server:
-                outcome = send_reply(server, key, data.decode("utf-8"))
-        except (OSError, RuntimeError, ValueError, KeyError):
-            outcome = "openSession"
-        print(outcome)
-        return 0
-    link = "codex://threads/" + key if args.session.startswith("codex://threads/") else None
-    def stop(signum, frame):
-        raise KeyboardInterrupt
-    signal.signal(signal.SIGTERM, stop)
-    try:
-        watch(key, link, args.socket, default_directory())
-    except KeyboardInterrupt:
-        return 0
-    except FileNotFoundError:
-        print("The Codex control socket is missing. Start the local Codex daemon.", file=sys.stderr)
-        return 1
-    except (RuntimeError, OSError, ValueError) as error:
-        print(str(error), file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def library_page(server, cursor=None, loaded=False):
+    params = {"limit": 60, "currentAccountOnly": True}
+    if cursor:
+        params["cursor"] = cursor
+    if loaded:
+        ids = server.call("thread/loaded/list", {"limit": 100, "cursor": cursor})
+        rows = server.call("thread/list", {"currentAccountOnly": True, "limit": 100,
+                           "includedThreadIds": ids["data"]})["data"] if ids["data"] else []
+        page = {"data": rows, "nextCursor": ids.get("nextCursor")}
+    else:
+        page = server.call("thread/list", params)
+    items = []
+    for row in page["data"]:
+        key = str(uuid.UUID(row["id"]))
+        title = " ".join((row.get("name") or "").split())[:120]
+        items.append({"provider": "Codex", "sessionID": key, "title": title or "Thread " + key[:8],
+                      "updated": row.get("updatedAt") or 0, "state": status(row)[0] if row.get("status") else None})
+    return {"items": items, "next": page.get("nextCursor")}

@@ -6,6 +6,11 @@ import UniformTypeIdentifiers
 private let mint = Color(red: 0.57, green: 0.92, blue: 0.77)
 private let lilac = Color(red: 0.76, green: 0.70, blue: 0.98)
 
+struct UsageWindow: Decodable, Sendable {
+    let label: String
+    let usedPercent: Int
+}
+
 private struct LibraryPage: Decodable {
     let items: [LibraryItem]
     let next: String?
@@ -24,6 +29,14 @@ final class SessionLibrary: ObservableObject {
     @Published var message: String?
 
     private static func read(_ resource: String, arguments: [String]) async throws -> LibraryPage {
+        try await decode(LibraryPage.self, resource: resource, arguments: arguments)
+    }
+
+    static func accountUsage() async throws -> [UsageWindow] {
+        try await decode([UsageWindow].self, resource: "monitor", arguments: ["--usage"])
+    }
+
+    private static func decode<T: Decodable & Sendable>(_ type: T.Type, resource: String, arguments: [String]) async throws -> T {
         guard let script = Bundle.main.url(forResource: resource, withExtension: "py") else {
             throw CocoaError(.fileNoSuchFile)
         }
@@ -38,7 +51,7 @@ final class SessionLibrary: ObservableObject {
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { throw CocoaError(.fileReadUnknown) }
-            return try JSONDecoder().decode(LibraryPage.self, from: data)
+            return try JSONDecoder().decode(type, from: data)
         }.value
     }
 

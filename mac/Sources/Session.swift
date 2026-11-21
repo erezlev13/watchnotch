@@ -54,7 +54,6 @@ struct PendingRequest: Codable, Equatable {
 struct SessionDetails: Codable, Equatable {
     let model: String?
     let effort: String?
-    let tokens: Int64?
 }
 
 struct Snapshot: Codable, Equatable {
