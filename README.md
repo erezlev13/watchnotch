@@ -4,6 +4,8 @@
 
 Keep selected Codex and ChatGPT sessions within reach from a small desktop strip. Codex cards can show local thread activity. Saved ChatGPT cards reopen the conversation.
 
+The combined local preview also supports **Claude Desktop and Claude Code**. Pin an open chat, hand off a draft, or follow a local coding session. The [build guide below](#choose-a-build) identifies which features are in the public Mac download.
+
 | Platform | Start here |
 | --- | --- |
 | macOS | Build and open the Swift app from the [Mac directory](mac/README.md), or use the [Mac preview download](https://erezlev13.github.io/watchnotch/). |
