@@ -1,42 +1,87 @@
-:root{color-scheme:light;--ink:#42210f;--muted:#6c5544;--mint:#954619;--line:#decebc;font-family:Inter,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:#fcf8f1;color:var(--ink);font-size:16px}
-header,main,footer{width:min(1220px,91vw);margin:auto}
-header,footer,nav,.download,figcaption{display:flex;align-items:center}
-header,footer{justify-content:space-between}
-header{height:88px;border-bottom:1px solid var(--line)}
-.brand,footer span{font-size:23px;font-weight:720;letter-spacing:-1.2px}
-a{color:inherit;text-decoration:none}
-nav{gap:28px;font-weight:520;font-size:14px}
-a:hover{color:var(--mint)}a:focus-visible{outline:2px solid var(--mint);outline-offset:5px}
-.hero{display:grid;grid-template-columns:1.2fr 0.8fr;align-items:end;gap:8vw;padding:clamp(52px,7vw,112px) 0 48px}
-h1,h2,h3,p,figure{margin:0}
-h1,h2{font-weight:540;letter-spacing:-.077em;line-height:.94}
-h1{font-size:clamp(62px,8.8vw,132px)}
-h1 em{font-family:Georgia,serif;font-weight:400;letter-spacing:-.09em;color:var(--mint)}
-.intro p,.steps p{color:var(--muted);line-height:1.55}
-.intro p{font-size:clamp(16px,1.5vw,21px);max-width:38ch;margin-bottom:22px}
-.download{width:fit-content;gap:18px;background:#502813;color:#fffaef;padding:13px 19px;border-radius:30px;font-weight:650;transition:transform .2s}
-.download:hover{color:#fffaef;transform:translateY(-2px);background:#713916}
-small,figcaption,footer{font-size:12px;color:var(--muted)}
-small{display:block;margin-top:10px}
-.screen{position:relative;overflow:hidden;border-radius:22px;border:1px solid #54645f;background:linear-gradient(120deg,#273c42,#253038 52%,#273235);padding:40px 12px 34px}
-.notch{position:absolute;top:0;left:50%;translate:-50% 0;width:12%;height:17px;background:#0c1010;border-radius:0 0 11px 11px}
-picture,img{display:block;width:100%;height:auto}.screen img{border-radius:10px}
-figcaption{margin:11px 0 0}
-.try{display:grid;grid-template-columns:1fr 1fr;gap:8vw;margin:100px 0 70px}
-h2{font-size:clamp(46px,6.4vw,88px)}h3{font-size:21px;letter-spacing:-.035em;margin-bottom:8px}.steps article{padding:20px 0;border-top:1px solid var(--line)}.steps p+p{margin-top:8px}.steps a{text-decoration:underline}
-footer{border-top:1px solid var(--line);padding:24px 0 34px}
-@media(max-width:720px){header{height:64px}.hero,.try{grid-template-columns:1fr;gap:24px}.hero{padding:48px 0 30px}.try{margin:56px 0 30px}.intro p{max-width:44ch}.screen{padding:24px 1px 16px;border-radius:10px}.notch{height:9px}.screen img{border-radius:4px}nav{gap:16px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.download{transition:none}}
-
-.brand{display:inline-flex;align-items:center;gap:7px}.brand img{width:46px;height:46px;object-fit:contain;mix-blend-mode:multiply}
-.hero{align-items:center;gap:3vw;padding:48px 0 46px}.herocopy .intro{margin-top:22px}.intro p{max-width:44ch}
-.owl{width:100%;max-width:500px;justify-self:center;mix-blend-mode:multiply}
-@media(max-width:720px){.hero{grid-template-columns:minmax(0,1fr) 28%;gap:4px;align-items:start}.herocopy{display:contents}.herocopy h1{align-self:center;font-size:clamp(45px,10vw,64px)}.herocopy .intro{grid-column:1/-1;grid-row:2}.owl{grid-column:2;grid-row:1;align-self:center}.brand img{width:36px;height:36px}}
-
-.library-tour{display:grid;grid-template-columns:1fr minmax(240px,420px);align-items:center;gap:8vw;margin-top:84px}
-.library-tour p{max-width:46ch;margin-top:18px;line-height:1.6;color:var(--muted)}
-.library-tour figcaption{justify-content:center}
-@media(max-width:720px){.library-tour{grid-template-columns:1fr;gap:24px;margin-top:52px}.library-tour figure{max-width:420px;margin:auto}}
+:root {
+  color-scheme: light;
+  --ink: #42210f;
+  --muted: #6c5544;
+  --accent: #954619;
+  --paper: #fcf8f1;
+  --line: #decebc;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+body, h1, h2, h3, p, figure { margin: 0 }
+header, main, footer { width: min(1160px, 91vw); margin-inline: auto }
+header, footer, nav, .brand, .actions, .download, .section-heading { display: flex; align-items: center }
+header, footer, .section-heading { justify-content: space-between }
+header { height: 80px; border-bottom: 1px solid var(--line) }
+.brand, footer span { font-weight: 720; letter-spacing: -.05em; font-size: 23px }
+.brand { gap: 7px }
+.brand img { width: 46px; mix-blend-mode: multiply }
+a { color: inherit; text-decoration: none }
+a:hover { color: var(--accent) }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px }
+nav { gap: 24px; font-size: 14px; font-weight: 560 }
+img, video { display: block; width: 100%; height: auto }
+.hero { display: grid; grid-template-columns: 1.2fr .8fr; align-items: center; gap: 3vw; padding: 44px 0 48px }
+h1, h2 { font-weight: 540; letter-spacing: -.076em; line-height: .96 }
+h1 { font-size: clamp(62px, 8.5vw, 120px) }
+h1 em, h2 em { font-family: Georgia, serif; font-weight: 400; color: var(--accent) }
+h2 { font-size: clamp(45px, 6vw, 82px) }
+.owl { max-width: 460px; justify-self: center; mix-blend-mode: multiply }
+.intro { margin-top: 22px }
+p { color: var(--muted); line-height: 1.55 }
+.intro p { font-size: clamp(16px, 1.4vw, 20px); max-width: 44ch }
+.actions { gap: 22px; flex-wrap: wrap; margin: 22px 0 10px; font-size: 15px; font-weight: 630 }
+.download { width: fit-content; gap: 18px; background: #502813; color: #fffaef; padding: 13px 19px; border-radius: 30px }
+.download:hover { background: #713916; color: white }
+.watch span { margin-left: 3px }
+small, figcaption, footer, .section-heading span { font-size: 13px; color: var(--muted) }
+section[id] { scroll-margin-top: 24px }
+.section-heading { gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding: 23px 0 17px; align-items: baseline }
+.section-heading h2 { font-size: clamp(32px, 4vw, 54px) }
+video { aspect-ratio: 16/9; border-radius: 16px; background: #30251d }
+figcaption { margin-top: 10px; line-height: 1.5 }
+.chapters { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-top: 16px }
+.chapters a { border-top: 1px solid var(--line); padding: 10px 2px; line-height: 1.45 }
+.chapters a:hover, .chapters a[aria-current] { border-color: var(--accent); color: var(--accent) }
+.chapters time { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
+.library-tour, .try { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 8vw; margin: clamp(54px, 8vw, 110px) 0 }
+.library-tour p { max-width: 44ch; margin-top: 17px }
+.library-tour figure { max-width: 390px; justify-self: center }
+.library-tour figcaption { text-align: center }
+.try { align-items: start; padding-top: 24px; border-top: 1px solid var(--line) }
+.platform-link { font-size: 14px; margin-top: 24px }
+.platform-link a, .steps a { text-decoration: underline; text-underline-offset: .15em }
+.steps article + article { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line) }
+.steps small { color: var(--accent); font-weight: 620 }
+h3 { font-size: 23px; letter-spacing: -.04em; margin: 5px 0 8px }
+.steps p + p { margin-top: 8px }
+footer { border-top: 1px solid var(--line); padding: 24px 0 34px }
+@media (max-width: 720px) {
+  header { height: 64px }
+  header nav { gap: 14px }
+  .brand img { width: 36px }
+  .hero { grid-template-columns: minmax(0, 1fr) 28%; gap: 4px; padding: 34px 0 }
+  .herocopy { display: contents }
+  h1 { font-size: clamp(43px, 10vw, 70px) }
+  .intro { grid-column: 1/-1; grid-row: 2; margin-top: 12px }
+  .owl { grid-column: 2; grid-row: 1 }
+  .chapters { grid-template-columns: repeat(3, 1fr) }
+  .library-tour, .try { grid-template-columns: 1fr; gap: 28px }
+  video { border-radius: 9px }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto }
+}
+.guide { margin-bottom: clamp(54px, 8vw, 100px) }
+.guide details { border-bottom: 1px solid var(--line); padding: 16px 0 }
+.guide summary { cursor: pointer; font-weight: 620; font-size: 18px; letter-spacing: -.02em }
+.guide p { max-width: 78ch; margin: 12px 0 0 1.15em }
+.guide p a, .guide .section-heading a { text-decoration: underline; text-underline-offset: .15em }
+.guide .section-heading a { font-size: 14px }
+code { overflow-wrap: anywhere }
+.reply-example { max-width: 646px; margin: 15px 0 0 1.15em }
+.reply-example img { background: #404344; border-radius: 12px }
+@media (max-width: 410px) { header nav { gap: 10px; font-size: 13px } .brand { gap: 3px; font-size: 20px } }

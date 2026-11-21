@@ -1,35 +1,104 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#fcf8f1">
-<meta name="description" content="See what ChatGPT Work and Codex are doing, read the full update, and follow up from a floating tile on your Mac.">
-<title>watchnotch — Your AI sessions at a glance</title>
-<link rel="icon" type="image/png" href="media/owl-small.png">
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fcf8f1">
+  <meta name="description" content="Follow pinned Codex and ChatGPT sessions from your Mac notch. Watch a short tour of live updates, questions, approvals and replies.">
+  <title>watchnotch — Your AI sessions at a glance</title>
+  <link rel="icon" type="image/png" href="media/owl-small.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="tour.js" defer></script>
 </head>
 <body>
-<header><a class="brand" href="./" aria-label="watchnotch home"><img src="media/owl-small.png" alt="" width="46" height="46">watchnotch</a><nav><a href="#try">Try it</a><a href="https://github.com/erezlev13/watchnotch">GitHub ↗</a></nav></header>
+<header>
+  <a class="brand" href="./" aria-label="watchnotch home"><img src="media/owl-small.png" alt="" width="46" height="46">watchnotch</a>
+  <nav aria-label="Main navigation"><a href="#tour">Film</a><a href="#guide">Guide</a><a href="#try">Try it</a><a href="https://github.com/erezlev13/watchnotch">GitHub ↗</a></nav>
+</header>
 <main>
-<section class="hero">
-<div class="herocopy"><h1>Your sessions,<br><em>within reach.</em></h1>
-<div class="intro"><p>Keep ChatGPT Work and Codex above your workspace. Follow the owl to the latest activity, read the full update, and start your next reply right in the tile.</p>
-<a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.7/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a>
-<small>Apple silicon · macOS 13 or later · Preview 0.1.7</small></div></div>
-<img class="owl" src="media/watchnotch-owl.png" alt="The brown watchnotch owl looking up" width="1254" height="1254">
-</section>
-<figure><div class="screen"><div class="notch" aria-hidden="true"></div><img src="media/reply-tiles.png" alt="Two floating Mac tiles. The Codex build summary wraps across four lines above its reply field. The ChatGPT tile shows Writing a response and a Copy &amp; open composer." width="1292" height="644"></div><figcaption>Example sessions in the Mac app. Each tile grows to fit its full update.</figcaption></figure>
-<section class="library-tour" aria-labelledby="library-title"><div><h2 id="library-title">Pin what’s<br>active.</h2>
-<p>Choose Active to find sessions that are working or waiting for you. The picker refreshes as you search by title. ChatGPT Work can appear as soon as the desktop app records an active turn, even before it supplies the title.</p>
-<p>A single tile stays centered and compact. Each tile is at most 300 points wide, and your display determines how many fit. Existing pins stay available when you move to a smaller screen.</p></div>
-<figure><img src="media/session-library.png" alt="The Mac session library shows two active example conversations and a Codex thread that needs input, each with its own pin button." width="1080" height="1160" loading="lazy"><figcaption>Session library with example conversations.</figcaption></figure></section>
-<section id="try" class="try"><h2>Try it on<br>your Mac.</h2><div class="steps">
-<article><h3>Open watchnotch</h3><p>Unzip the download and open the app. Three demo sessions appear on your first launch. Click the notch strip or the menu bar icon to expand it.</p><p>This preview is ad-hoc signed. If macOS blocks the download, you can build it locally using the <a href="https://github.com/erezlev13/watchnotch/blob/v0.1.7/README.md#build-and-open">source instructions</a>.</p></article>
-<article><h3>Pin a real session</h3><p>Open the sliders in the notch, choose ChatGPT or Codex, and pin a session. You can also paste a private ChatGPT conversation link into the search field.</p></article>
-<article><h3>Read the update</h3><p>Read one sentence about what’s happening, what needs you, or what finished. The lines appear from top to bottom. The next update waits while you read. Click the sentence to reveal it immediately. <a href="media/vertical-summary.gif">Watch three updates arrive in order (16 seconds)</a>. ChatGPT Work shows activity the desktop app reports, such as “ChatGPT is writing a reply.”</p><p>A subagent tile appears under its parent while it works or waits for input. It disappears when the turn ends. Forks remain available to reopen. Open ⓘ to see the model, reasoning effort and token count when available.</p></article>
-<article><h3>Answer a question</h3><p>In the source build, a question takes over its tile as soon as it needs you. Pick an answer or approve or deny a supported request. Other sessions keep updating while you choose. For ChatGPT on Mac, enable Accessibility for watchnotch and keep the conversation open so its buttons are available.</p></article>
-<article><h3>Reply from a tile</h3><p>Type below <strong>Jump in</strong>. The arrow sends your reply to that Codex thread. For ChatGPT Work, <strong>Copy &amp; open</strong> copies the draft and opens the conversation so you can paste and send it there.</p></article>
-</div></section>
+  <section class="hero">
+    <div class="herocopy">
+      <h1>Your sessions,<br><em>within reach.</em></h1>
+      <div class="intro">
+        <p>Pin Codex and ChatGPT to your Mac notch. The owl follows the latest update, so you can see which session needs you while you work.</p>
+        <div class="actions"><a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.7/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a><a class="watch" href="#tour">Watch the film <span aria-hidden="true">↘</span></a></div>
+        <small>Apple silicon · macOS 13 or later · Preview 0.1.7</small>
+      </div>
+    </div>
+    <img class="owl" src="media/watchnotch-owl.png" alt="The brown watchnotch owl looking up" width="1254" height="1254">
+  </section>
+
+  <section id="tour" aria-labelledby="tour-title">
+    <div class="section-heading"><h2 id="tour-title">Inside the notch.</h2><span>Mac feature film · 44 seconds</span></div>
+    <figure>
+      <video id="film" aria-label="Watchnotch Mac feature film" aria-describedby="film-caption" width="1920" height="1080" controls playsinline preload="none" poster="media/feature-tour.jpg">
+        <source src="media/feature-tour.mp4" type="video/mp4">
+        <track kind="captions" src="media/feature-tour.vtt" srclang="en" label="English descriptions">
+        <a href="media/feature-tour.mp4">Open the feature film</a>
+      </video>
+      <figcaption id="film-caption">A silent walkthrough with example sessions. Jump to a moment below.</figcaption>
+    </figure>
+    <nav class="chapters" aria-label="Film chapters">
+      <a href="media/feature-tour.mp4#t=0"><time datetime="PT0S">0:00</time>Pin a session</a>
+      <a href="media/feature-tour.mp4#t=6"><time datetime="PT6S">0:06</time>Live updates</a>
+      <a href="media/feature-tour.mp4#t=12"><time datetime="PT12S">0:12</time>Questions</a>
+      <a href="media/feature-tour.mp4#t=18"><time datetime="PT18S">0:18</time>Approvals</a>
+      <a href="media/feature-tour.mp4#t=24"><time datetime="PT24S">0:24</time>Desktop replies</a>
+      <a href="media/feature-tour.mp4#t=30"><time datetime="PT30S">0:30</time>Previews &amp; queues</a>
+      <a href="media/feature-tour.mp4#t=36"><time datetime="PT36S">0:36</time>Screenshots</a>
+    </nav>
+  </section>
+
+  <section class="library-tour" aria-labelledby="library-title">
+    <div>
+      <h2 id="library-title">Pin what’s<br><em>active.</em></h2>
+      <p>Open the session library and choose <strong>Active</strong> to find conversations that are working or waiting for you. Search by title, then pin the ones you want to follow.</p>
+      <p>Each tile shows one update at a time. The next sentence waits while you read. A working subagent appears under its Codex thread, and a saved fork stays available to reopen.</p>
+      <p>A single pin stays centered. Each tile is at most 300 points wide. On a smaller display, scroll across the row to reach your existing pins.</p>
+    </div>
+    <figure><img src="media/session-library.png" alt="The Mac session library with an Active filter and a Pin button beside each example conversation." width="1080" height="1160" loading="lazy"><figcaption>The Mac session library with example conversations.</figcaption></figure>
+  </section>
+
+  <section id="try" class="try" aria-labelledby="try-title">
+    <div><h2 id="try-title">Try it on<br><em>your Mac.</em></h2><p class="platform-link">On Windows? <a href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md">Run the Windows preview ↗</a></p></div>
+    <div class="steps">
+      <article><small>Mac download · 0.1.7</small><h3>Follow your first session</h3><p>Unzip the download and open watchnotch. Click the notch strip to see three demo sessions. Open the sliders to pin a real Codex thread or ChatGPT conversation. Click a status sentence to reveal the whole update.</p><p>The preview is ad-hoc signed. If macOS blocks it, you can <a href="https://github.com/erezlev13/watchnotch/blob/v0.1.7/README.md#build-and-open">build the preview locally</a>.</p></article>
+      <article><small>Mac source build</small><h3>Answer from the tile</h3><p>When a session asks a question, its choices appear in the tile. Pick an option, or select each answer and click <strong>Send answers</strong> for a group of questions. Review a supported approval and choose <strong>Approve once</strong> or <strong>Deny</strong>.</p></article>
+      <article><small>Mac source build</small><h3>Reply to the conversation</h3><p>Type below <strong>Jump in</strong> and press Return to send to a connected Codex thread or desktop ChatGPT conversation. For ChatGPT, keep the conversation open and grant watchnotch Accessibility access in System Settings. Use <strong>Copy &amp; open</strong> when a handoff is needed.</p><p><a href="https://github.com/erezlev13/watchnotch/blob/main/mac/README.md#build-and-open">Build the Mac app from source ↗</a></p></article>
+      <article><small>In development · Mac</small><h3>Read a reply and send a screenshot</h3><p>The development build can preview the last assistant reply seen in an open, pinned ChatGPT conversation with Accessibility access. Paste one screenshot into a tile and add a multiline caption. Connected Codex threads receive both together. For ChatGPT, choose <strong>Copy image &amp; open</strong>, then paste and send in the conversation.</p></article>
+    </div>
+  </section>
+  <section class="guide" id="guide" aria-labelledby="guide-title">
+    <div class="section-heading"><h2 id="guide-title">Session guide.</h2><a href="https://github.com/erezlev13/watchnotch#readme">Project README ↗</a></div>
+    <details open><summary>Find, import and pin conversations</summary>
+      <p>On Mac, expand the strip by the camera or use the menu bar icon. Open the sliders or choose <strong>Session library…</strong>. Add a Codex thread from the local library, its UUID or its desktop link. For ChatGPT Chat and Work, use the desktop catalog, paste a private conversation link, search browser history on request, or import a ChatGPT export ZIP or conversations JSON file. Titles, IDs and dates stay on your Mac. Pins keep their order across launches.</p>
+    </details>
+    <details><summary>Read progress, branches and account usage</summary>
+      <p>Codex checks the local App Server about every 2.5 seconds. The tile shows a short visible update from the thread. Click a sentence to reveal it instantly, or enable Reduce Motion for full sentences. A subagent appears under its parent while working or waiting for input. Click it or a saved fork to open that thread.</p>
+      <p>In the Mac source build, ⓘ shows the reported Codex model, reasoning effort and percentage used in each available account window. Preview 0.1.7 shows recorded session tokens when available. <a href="media/vertical-summary.gif">See the original three-update example (16 seconds)</a>.</p>
+    </details>
+    <details><summary>Watch ChatGPT Chat and Work</summary>
+      <p>The Mac source build refreshes desktop activity about every three seconds, even with the notch collapsed. A quiet indexed chat shows <strong>Watching</strong>. Closing ChatGPT takes it offline, and reopening ChatGPT resumes monitoring. An active Work turn can appear by ID before its title arrives. In the development build, an open window matching a pin can provide a reply preview before the catalog entry appears. When the desktop composer offers <strong>Queue</strong> during a turn, the tile can queue a follow-up and show <strong>Queued in ChatGPT</strong>. A saved web link can reopen a conversation even when desktop activity is unavailable.</p>
+    </details>
+    <details><summary>Answer, approve and return to work</summary>
+      <p>On the Mac source build, a pending question replaces that tile’s status. Other sessions keep updating. Codex supports offered choices, written answers when offered, and one-time command decisions. For desktop ChatGPT, keep the conversation open so watchnotch can mirror visible single-choice questions and approvals. Use <strong>Open session</strong> for a request that needs the original interface.</p>
+      <p><strong>Jump in</strong> opens the selected thread or desktop chat. Use the globe or Control-click for <strong>Open in browser</strong> when a web link is available. Pair a Codex web link with its local UUID in Manage sessions. <strong>Open result</strong> opens an available result separately.</p>
+    </details>
+    <details><summary>Keep drafts, send text and attach images</summary>
+      <p>Each Mac tile keeps its own draft when you switch pins or collapse the row. In preview 0.1.7, the arrow sends text to Codex, and <strong>Copy &amp; open</strong> hands a ChatGPT draft to its conversation. The Mac source build can send text to the verified desktop ChatGPT composer. Control-click the arrow for the clipboard handoff.</p>
+      <figure class="reply-example"><img src="media/reply-tiles.png" alt="Two example Mac tiles in preview 0.1.7 with a wrapped Codex build update, a text reply field and a ChatGPT Copy &amp; open field." width="1292" height="644" loading="lazy"><figcaption>Two pinned sessions in Mac preview 0.1.7.</figcaption></figure>
+      <p>In the development build, Shift-Return adds a line. The editor grows to six lines, then scrolls. Copy a screenshot with Control–Shift–Command–4 and paste it into the tile, or choose <strong>Paste image</strong>. Remove it with ×. Codex accepts the image with an optional caption. For ChatGPT, paste the copied image in the conversation and send it there.</p>
+    </details>
+    <details><summary>Run the Windows preview</summary>
+      <p>Install Python 3.9 or later with Tkinter. From the repository root, run <code>py -3 windows\watchnotch.pyw</code>. Click the owl to expand the strip. Library search, Active filtering, desktop discovery, browser and export imports, and paged pins are available. Codex monitoring needs a running local daemon.</p>
+      <p>Follow activity and branches, inspect account usage or send text to a connected Codex thread. Review approvals in Codex. For ChatGPT, use <strong>Copy &amp; open</strong> to continue in the conversation. <a href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md">Windows setup and verification notes ↗</a></p>
+    </details>
+    <details><summary>Demo sessions, local storage and verification</summary>
+      <p>On Mac, choose <strong>Replay demo events</strong> to try questions, one-time approvals and replies with sample sessions. Approving a demo file writes that sample locally. Denying skips it. Pins, demo output and snapshots live in the Mac Notch Session Companion folder under Application Support. On Windows, the saved library lives under <code>%LOCALAPPDATA%\watchnotch</code>.</p>
+      <p>For build commands, provider requirements, permissions and test procedures, read the <a href="https://github.com/erezlev13/watchnotch/blob/main/mac/README.md">Mac guide</a>, <a href="https://github.com/erezlev13/watchnotch/blob/main/mac/Adapters/Codex/README.md">Codex adapter notes</a> and <a href="https://github.com/erezlev13/watchnotch/blob/main/mac/Adapters/ChatGPT/README.md">ChatGPT desktop notes</a>.</p>
+    </details>
+  </section>
 </main>
-<footer><span>watchnotch</span><a href="https://github.com/erezlev13/watchnotch/releases/tag/v0.1.7">Release notes ↗</a></footer>
-</body></html>
+<footer><span>watchnotch</span><a href="https://github.com/erezlev13/watchnotch/releases/tag/v0.1.7">Mac preview release notes ↗</a></footer>
+</body>
+</html>

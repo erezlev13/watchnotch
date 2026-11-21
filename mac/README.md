@@ -12,6 +12,8 @@ A subagent appears inside its pinned parent while working or waiting for input a
 
 The public 0.1.7 download includes queued summaries and active subagent tiles. The source build also keeps quiet ChatGPT conversations connected and restores monitoring when the desktop app reopens. [Watch three queued updates](../docs/media/vertical-summary.gif)
 
+[Watch the 44-second feature film](https://erezlev13.github.io/watchnotch/#tour) for a walkthrough of the download, public source build and features in development. The film uses example conversations.
+
 ## Build and open
 
 On this Mac, run the following from the `mac/` directory.
@@ -42,6 +44,14 @@ Expand the pinned row and type in **Reply to this session** below **Jump in**. D
 The Codex monitor polls its local App Server about every 2.5 seconds. ChatGPT activity refreshes about every three seconds while a conversation is pinned or the library is open. A quiet desktop conversation shows **Watching**. If ChatGPT closes, its indexed pins go offline and reconnect when it reopens. The desktop app may report an active Work turn before supplying its title. watchnotch displays that conversation by ID until the title arrives. Account exports and browser imports supply conversation links. Live updates depend on a matching desktop activity signal.
 
 Pins, demo outputs and snapshots are stored locally in the Mac Notch Session Companion folder under Application Support. Independent disposable Codex threads were used to verify delivery of distinct replies to the selected sessions. [Codex adapter](Adapters/Codex/README.md) · [ChatGPT adapter](Adapters/ChatGPT/README.md)
+
+## Mac features in development
+
+The development build expands a tile’s draft to six lines, then scrolls. Shift-Return inserts a line break. To add one screenshot, copy a selection with Control–Shift–Command–4, then paste in the reply field or choose **Paste image**. Use the × beside its thumbnail to remove it.
+
+For a connected Codex thread, the send arrow submits the image and optional caption together. For ChatGPT, **Copy image & open** places the screenshot on the clipboard. Paste and send it in the destination conversation. Watchnotch can stage the caption in an empty desktop composer, and **Copy text & open** makes the caption available separately.
+
+With Accessibility access, an open, pinned ChatGPT conversation can also show a short preview of its last observed assistant reply. Scroll to the bottom of the transcript so watchnotch can observe the latest reply. The preview stays in memory and can show up to 240 characters. A matching open window can connect a pin even before its catalog entry appears. When the desktop composer offers **Queue** during an active turn, the tile can send a follow-up and show **Queued in ChatGPT**.
 
 ## Jump back to a session
 
