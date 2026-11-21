@@ -45,17 +45,8 @@ section[id] { scroll-margin-top: 24px }
 .tour-intro { max-width: 70ch; margin: 0 0 22px }
 .tour-intro h3 { margin-top: 0 }
 .demo-preview video { aspect-ratio: 16/9; border: 1px solid var(--line); border-radius: 16px; background: #f4eada }
-.demo-preview figcaption { margin: 12px 0; line-height: 1.5 }
-.demo-preview a, .transcript summary { text-decoration: underline; text-underline-offset: .2em }
-.demo-preview a { white-space: nowrap }
-.chapters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 0 18px; margin-block: 18px 8px }
-.chapters a { display: flex; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line) }
-.chapters time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px }
-.chapters [aria-current] { color: var(--accent); text-decoration: underline; text-underline-offset: .2em }
-.transcript summary { cursor: pointer; padding-block: 10px; font-size: 14px }
-.transcript ol { max-width: 75ch; padding-left: 1.5em; color: var(--muted); line-height: 1.55 }
-.transcript li + li { margin-top: 8px }
 .film-alternative { padding: 16px; border: 1px solid var(--line); border-radius: 12px }
+.film-alternative a { text-decoration: underline }
 .film-alternative img { width: min(100%, 360px); margin-bottom: 12px; background: #53483e; border-radius: 12px }
 .library-tour, .try { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 8vw; margin: clamp(54px, 8vw, 110px) 0 }
 .library-tour p { max-width: 44ch; margin-top: 17px }
