@@ -2,14 +2,22 @@
 
 ![watchnotch owl](docs/media/owl-small.png)
 
-Keep selected Codex and ChatGPT sessions within reach from a small desktop strip. Codex cards can show local thread activity. Saved ChatGPT cards reopen the conversation.
+**More AI sessions. Less switching.** WatchNotch is a productivity companion for **anyone juggling parallel AI conversations**, whether they are researching, writing, learning, planning, working on a business idea or coding. Follow selected sessions from a compact desktop strip, understand what needs your attention and jump directly back in. Every session keeps its own identity and context; related topics are never automatically merged.
 
-The combined local preview also supports **Claude Desktop and Claude Code**. Pin an open chat, hand off a draft, or follow a local coding session. The [build guide below](#choose-a-build) identifies which features are in the public Mac download.
+The current public Mac preview centers on **Codex and ChatGPT**. The local development build adds **Claude Desktop and Claude Code**. Provider actions vary by integration and release: don't assume that every chat supports direct replies or approvals. The [build guide below](#choose-a-build) identifies the currently available features. Our [product vision and provider roadmap](docs/PRODUCT_VISION.md) covers the goal of supporting more AI tools globally, including Qwen, Kimi and DeepSeek.
 
 | Platform | Start here |
 | --- | --- |
 | macOS | Build and open the Swift app from the [Mac directory](mac/README.md), or use the [Mac preview download](https://erezlev13.github.io/watchnotch/). |
 | Windows | Launch the Python desktop preview with `py -3 windows\watchnotch.pyw`. See the [Windows setup and verification notes](windows/README.md). |
+
+## Who it is for
+
+- **Everyone using AI for productivity:** research, writing, travel planning, learning, shopping decisions, entrepreneurship and everyday projects.
+- **People using more than one AI provider:** a unified place to see sessions while keeping each conversation independent. The global-provider support roadmap is not yet implemented.
+- **Developers:** code agents and approvals are important workflows, but they are not the whole product.
+
+See [our product vision, audience and future provider roadmap](docs/PRODUCT_VISION.md). The [WatchNotch Space](https://chatgpt.com/space/page_6b0170689bfc8191894b3d0655910426) stores the longer-term strategy, competitive research, naming alternatives and future integration workstreams.
 
 ## What you can do
 
