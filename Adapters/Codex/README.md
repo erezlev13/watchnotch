@@ -1,6 +1,6 @@
 # Codex session monitoring
 
-Connect a chosen thread by pasting its UUID or an original `codex://threads/UUID` link into the companion's Codex connection field. The monitor asks the local daemon for that thread's metadata every 1.5 seconds. The title comes from the thread name when available. The companion builds a **Jump in** desktop link from the thread UUID and accepts an optional corresponding web address in Manage sessions.
+Connect a chosen thread by pasting its UUID or an original `codex://threads/UUID` link into the companion's Codex connection field. The monitor asks the local daemon for that thread's metadata every 2.5 seconds. The title comes from the thread name when available. The companion builds a **Jump in** desktop link from the thread UUID and accepts an optional corresponding web address in Manage sessions.
 
 From the repository root, the same monitor can run on its own.
 
@@ -34,6 +34,6 @@ The test opens a disposable thread, runs the fixed command `/bin/sleep 5` and ex
 
 ## Protocol and scope
 
-The adapter uses the documented WebSocket upgrade on the local Unix socket, initializes a client and calls `thread/read` with `includeTurns: false`. For idle and unloaded threads it also requests the latest turn's status using `thread/turns/list` with `itemsView: notLoaded`. The adapter does not enumerate threads or subscribe to transcript events. An idle thread with a completed, failed or interrupted saved turn gets a sentence identifying that outcome. An unloaded thread keeps an unavailable badge even when saved turn metadata is available. Codex returns a preview in the standard thread metadata response; the adapter discards it and logs no conversation content. [OpenAI App Server guide](https://developers.openai.com/codex/app-server/)
+Opening the session library pages through `thread/list` on the local Unix socket. The library retains thread IDs, titles and update times in memory. Each pinned monitor polls `thread/read`, looks up the latest turn with `thread/turns/list`, and requests a limited descending page from `thread/items/list` for that turn. The card uses a short excerpt from a visible agent update or a description of a file, command or search event. Reasoning, raw commands and tool output are excluded from the displayed sentence. Only the resulting snapshot is persisted. Older daemons and ephemeral sessions fall back to the available title and state. [OpenAI App Server guide](https://developers.openai.com/codex/app-server/)
 
 Codex also documents project-scoped command hooks. A trusted `PermissionRequest` hook can return an allow or deny decision on its own invocation. This prototype uses the metadata observer so it can attach to a selected session without changing the user's hook configuration. Live native hook delivery and native approval routing were not demonstrated. [OpenAI hooks guide](https://developers.openai.com/codex/hooks/)

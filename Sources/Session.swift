@@ -103,3 +103,28 @@ enum Format {
         url.scheme == "https" && url.host?.isEmpty == false && url.user == nil && url.password == nil
     }
 }
+
+struct TileLayout {
+    static let gap: CGFloat = 14
+    static let inset: CGFloat = 16
+    static let minimum: CGFloat = 244
+    static let maximum: CGFloat = 300
+    let available: CGFloat
+    var capacity: Int { max(1, Int((available - 2 * Self.inset + Self.gap) / (Self.minimum + Self.gap))) }
+    func tileWidth(for count: Int) -> CGFloat {
+        let visible = CGFloat(min(capacity, max(1, count)))
+        return max(1, min(Self.maximum, floor((available - 2 * Self.inset - (visible - 1) * Self.gap) / visible)))
+    }
+    func rowWidth(for count: Int) -> CGFloat {
+        let visible = CGFloat(min(capacity, max(1, count)))
+        return min(available, 2 * Self.inset + visible * tileWidth(for: count) + (visible - 1) * Self.gap)
+    }
+}
+
+struct LibraryItem: Codable, Identifiable {
+    let provider: String
+    let sessionID: String
+    let title: String
+    let updated: Double
+    var id: Identity { Identity(origin: .adapter, provider: provider, sessionID: sessionID) }
+}

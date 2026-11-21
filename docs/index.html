@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#fcf8f1">
-<meta name="description" content="Keep up to five ChatGPT and Codex sessions within reach in your Mac’s notch.">
+<meta name="description" content="Find and pin ChatGPT conversations and Codex sessions in a compact row above your workspace.">
 <title>watchnotch — Your AI sessions at a glance</title>
 <link rel="icon" type="image/png" href="media/owl-small.png">
 <link rel="stylesheet" href="style.css">
@@ -13,17 +13,21 @@
 <main>
 <section class="hero">
 <div class="herocopy"><h1>Your sessions,<br><em>within reach.</em></h1>
-<div class="intro"><p>Pin up to five ChatGPT and Codex sessions across the top of your Mac. Follow the owl to the latest active session, open a result, or jump back into the conversation.</p>
-<a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.2/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a>
-<small>Apple silicon · macOS 13 or later · Preview 0.1.2</small></div></div>
+<div class="intro"><p>Find your ChatGPT conversations and Codex threads in one searchable Mac library. Pin the ones you’re using. Follow the owl to the latest active session, open a result, or jump back into the conversation.</p>
+<a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.4/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a>
+<small>Apple silicon · macOS 13 or later · Preview 0.1.4</small></div></div>
 <img class="owl" src="media/watchnotch-owl.png" alt="The brown watchnotch owl looking up" width="1254" height="1254">
 </section>
 <figure><div class="screen"><div class="notch" aria-hidden="true"></div><picture><source media="(prefers-reduced-motion: reduce)" srcset="media/sessions.png"><img src="media/sessions.gif" alt="Three floating session tiles. The Codex and market research demos ask for independent approvals while the weekly brief stays ready." width="1024" height="286"></picture></div><figcaption>Demo sessions running in the native Mac app.</figcaption></figure>
+<section class="library-tour" aria-labelledby="library-title"><div><h2 id="library-title">Find a chat.<br>Pin it.</h2>
+<p>Open the session library to search the conversation titles available in ChatGPT on this Mac. Switch to Codex for local threads, or import a ChatGPT export to include chats from another device.</p>
+<p>A single tile stays centered and compact. Each tile is at most 300 points wide, and your display determines how many fit. Existing pins stay available when you move to a smaller screen.</p></div>
+<figure><img src="media/session-library.png" alt="The session library showing a search field, provider filters and a pin button next to each example conversation." width="1080" height="1160" loading="lazy"><figcaption>Session library with example conversations.</figcaption></figure></section>
 <section id="try" class="try"><h2>Try it on<br>your Mac.</h2><div class="steps">
 <article><h3>Open watchnotch</h3><p>Unzip the download and open the app. Three demo sessions appear on your first launch. Click the notch strip or the menu bar icon to expand it.</p><p>This preview is ad-hoc signed. If macOS blocks the download, you can build it locally using the <a href="https://github.com/erezlev13/watchnotch#build-and-open">source instructions</a>.</p></article>
-<article><h3>Pin a real session</h3><p>Open the sliders in the notch. Paste a private ChatGPT conversation link or the UUID of a thread available to your local Codex App Server.</p></article>
+<article><h3>Pin a real session</h3><p>Open the sliders in the notch, choose ChatGPT or Codex, then click the pin beside a session. You can also add a private conversation link manually.</p></article>
 <article><h3>Jump back in</h3><p>Choose <strong>Jump in</strong> on a linked tile to return to that session. ChatGPT tiles save conversation links. Codex can show live local thread status. Try the demo tiles to approve or deny two requests independently.</p></article>
 </div></section>
 </main>
-<footer><span>watchnotch</span><a href="https://github.com/erezlev13/watchnotch/releases/tag/v0.1.2">Release notes ↗</a></footer>
+<footer><span>watchnotch</span><a href="https://github.com/erezlev13/watchnotch/releases/tag/v0.1.4">Release notes ↗</a></footer>
 </body></html>

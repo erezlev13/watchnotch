@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import fcntl
 import json
 import os
+import re
+import shlex
 from pathlib import Path
 import socket
 import stat
@@ -154,17 +156,96 @@ def status(thread):
     return "unavailable", "This server has no live status for the session."
 
 
-def last_turn_status(server, key):
+def short_text(value, limit=148):
+    # A glanceable excerpt from a visible message, without code blocks or link destinations.
+    text = re.sub(r"```.*?(?:```|$)", " ", value or "", flags=re.S)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"https?://\S+|(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{10,}", "…", text)
+    text = " ".join(text.replace("*", "").replace("`", "").split()).strip("# -")
+    text = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
+    if len(text) > limit:
+        text = text[:limit - 1].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+    return text
+
+
+def command_activity(item):
+    status = item.get("status")
+    if status not in ("inProgress", "completed", "failed", "declined"):
+        return ""
+    active = status == "inProgress"
+    actions = item.get("commandActions") or []
+    for action in actions:
+        name = Path(action.get("path") or action.get("name") or "").name
+        name = short_text(name, 54)
+        if action.get("type") == "read" and name:
+            return ("Reading " if active else "Read ") + name
+        if action.get("type") == "listFiles" and name:
+            return ("Listing files in " if active else "Listed files in ") + name
+        if action.get("type") == "search" and name:
+            return ("Searching " if active else "Searched ") + name
+    try:
+        parts = shlex.split(item.get("command") or "")
+        if len(parts) >= 3 and Path(parts[0]).name in ("sh", "bash", "zsh") and "c" in parts[1]:
+            parts = shlex.split(parts[2])
+    except ValueError:
+        return ""
+    # Match command names and recognized subcommands. Arguments and output stay off the tile.
+    words = [Path(p).name for p in parts[:4]]
+    if any(w in ("test.sh", "pytest", "unittest", "test", "verify.py") for w in words):
+        return "Running tests" if active else ("Tests passed" if status == "completed" and item.get("exitCode") == 0 else "The test command stopped")
+    if any(w in ("build.sh", "swiftc", "xcodebuild") for w in words):
+        return "Building the app" if active else ("The build succeeded" if status == "completed" and item.get("exitCode") == 0 else "The build stopped")
+    if words[:2] == ["git", "diff"] or words[:2] == ["git", "status"]:
+        return "Checking repository changes" if active else "Checked repository changes"
+    return ""
+
+
+def activity(item):
+    kind = item.get("type")
+    if kind == "agentMessage":
+        moderation = item.get("moderation") or {}
+        if moderation.get("moderated") or (moderation.get("display") or {}).get("mode") in ("block", "hide"):
+            return ""
+        return short_text(item.get("text"))
+    if kind == "commandExecution":
+        return command_activity(item)
+    if kind == "fileChange":
+        names = [short_text(Path(c["path"]).name, 48) for c in item.get("changes", []) if c.get("path")]
+        if names:
+            target = names[0] + (" and " + str(len(names) - 1) + " more" if len(names) > 1 else "")
+            verb = {"inProgress": "Editing ", "completed": "Updated ", "failed": "Couldn’t update ", "declined": "Skipped edits to "}.get(item.get("status"))
+            return verb + target if verb else ""
+    if kind == "plan":
+        return short_text(item.get("text"))
+    if kind == "webSearch":
+        return "Checking sources for " + (short_text(item.get("query"), 72) or "the current task")
+    return ""
+
+
+def recent_progress(server, key, cache):
+    turn = None
     try:
         turns = server.call("thread/turns/list", {"threadId": key, "limit": 1,
                             "sortDirection": "desc", "itemsView": "notLoaded"})["data"]
+        if not turns:
+            return None, ""
+        turn = turns[0]
+        page = server.call("thread/items/list", {"threadId": key, "turnId": turn["id"], "limit": 12,
+                           "sortDirection": "desc", "deferOutput": {}})
     except RuntimeError:
-        # Ephemeral sessions and older servers can lack persisted turn metadata.
-        return None
-    return turns[0]["status"] if turns else None
+        # Older and ephemeral sessions may only provide thread-level status.
+        return (turn["status"], cache.get(turn["id"], "")) if turn else (None, "")
+    for entry in page["data"]:
+        if entry.get("turnId") == turn["id"]:
+            line = activity(entry.get("item") or {})
+            if line:
+                cache.clear()
+                cache[turn["id"]] = line
+                return turn["status"], line
+    return turn["status"], cache.get(turn["id"], "")
 
 
-def read_snapshot(server, key, link=None):
+def read_snapshot(server, key, link=None, cache=None):
     try:
         thread = server.call("thread/read", {"threadId": key, "includeTurns": False})["thread"]
     except RuntimeError as error:
@@ -172,17 +253,23 @@ def read_snapshot(server, key, link=None):
     if thread["id"] != key:
         raise RuntimeError("Codex returned a different thread identity.")
     state, sentence = status(thread)
-    runtime_type = thread["status"]["type"]
-    if runtime_type in ("idle", "notLoaded"):
-        last = last_turn_status(server, key)
-        updates = {"completed": "The last Codex turn finished.",
-                   "interrupted": "The last Codex turn was interrupted.",
-                   "failed": "The last Codex turn ended with an error."}
-        if last in updates:
-            sentence = updates[last]
-            if last == "failed":
-                state = "unavailable"
-    result = {"provider": "Codex", "sessionID": key, "title": thread.get("name") or "Codex session",
+    title = short_text(thread.get("name"), 110) or "Codex session"
+    last, line = recent_progress(server, key, cache if cache is not None else {})
+    if state == "needsInput":
+        reason = "Approval needed" if "waitingOnApproval" in thread["status"].get("activeFlags", []) else "Your input is needed"
+        sentence = reason + " — " + (line or title)
+    elif state == "running":
+        sentence = line if last == "inProgress" and line else "Working on “" + title + "”"
+    elif thread["status"]["type"] in ("idle", "notLoaded"):
+        if last == "failed":
+            state, sentence = "unavailable", "Turn failed — " + (line or title)
+        elif last == "interrupted":
+            sentence = "Turn interrupted — " + (line or title)
+        elif last == "completed":
+            sentence = line or ("Finished the last turn in “" + title + "”")
+    if sentence[-1:] not in ".!?…":
+        sentence += "."
+    result = {"provider": "Codex", "sessionID": key, "title": title,
               "state": state, "sentence": sentence}
     if link:
         result["sessionURL"] = link
@@ -219,17 +306,18 @@ def watch(key, link, socket, directory):
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = directory / f"codex-{key}.json"
     previous = None
+    cache = {}
     with session_lock(path):
         try:
             while True:
                 try:
                     with Server(socket) as server:
                         while True:
-                            current = read_snapshot(server, key, link)
+                            current = read_snapshot(server, key, link, cache)
                             if current != previous:
                                 publish(path, current)
                                 previous = current
-                            time.sleep(1.5)
+                            time.sleep(2.5)
                 except (RuntimeError, OSError, ValueError) as error:
                     if previous is None:
                         raise
@@ -246,9 +334,27 @@ def watch(key, link, socket, directory):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("session", help="Desktop thread link or UUID")
+    parser.add_argument("--list", action="store_true", help="List a page of thread titles and IDs")
+    parser.add_argument("--cursor", help="Continue a thread listing")
+    parser.add_argument("session", nargs="?", help="Desktop thread link or UUID")
     parser.add_argument("--socket", type=Path, help="Optional App Server control socket")
     args = parser.parse_args()
+    if args.list:
+        params = {"limit": 60, "currentAccountOnly": True}
+        if args.cursor:
+            params["cursor"] = args.cursor
+        with Server(args.socket) as server:
+            page = server.call("thread/list", params)
+        items = []
+        for row in page["data"]:
+            key = str(uuid.UUID(row["id"]))
+            name = " ".join((row.get("name") or "").split())[:120]
+            items.append({"provider": "Codex", "sessionID": key, "title": name or ("Thread " + key[:8]),
+                          "updated": row.get("updatedAt") or 0})
+        print(json.dumps({"items": items, "next": page.get("nextCursor")}))
+        return 0
+    if not args.session:
+        parser.error("A thread ID is required.")
     try:
         key = thread_id(args.session)
     except argparse.ArgumentTypeError as error:

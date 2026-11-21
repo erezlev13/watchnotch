@@ -155,3 +155,12 @@ try fs.setAttributes([.posixPermissions: 0o700], ofItemAtPath: document.path)
 check(Format.resultViewer(document) == nil, "accepted executable result")
 check(!Format.webResult(nativeURL) && Format.webResult(privateURL), "result URL scheme validation")
 print("PASS  Private snapshot reads, observer capabilities and constrained result viewers")
+
+for screen in [CGFloat(320), 1024, 1440, 1920, 3440] {
+    let layout = TileLayout(available: screen)
+    check(layout.tileWidth(for: 1) <= 300, "single tile stretched")
+    check(layout.rowWidth(for: 1) <= 332, "single tile window stretched")
+    check(layout.rowWidth(for: layout.capacity + 3) <= screen, "overflowing panel")
+    check(layout.tileWidth(for: layout.capacity + 3) == layout.tileWidth(for: layout.capacity), "shrunk retained pins after display change")
+}
+check(TileLayout(available: 1920).capacity > TileLayout(available: 1024).capacity, "fixed pin limit")

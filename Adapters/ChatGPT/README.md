@@ -2,6 +2,8 @@
 
 A private conversation URL can be added as a session in the companion. Select the session in the companion’s picker to pin it. Its **Jump in** action checks for a matching open window or app-associated link before opening the conversation URL in the default browser. Automatic updates, results, and approval controls are unavailable for these saved links.
 
+The session library reads titles, IDs and dates from the local ChatGPT desktop catalog when it opens. **Find on this Mac** can additionally find visited conversation links in readable Safari, Chrome, Edge, Brave, Arc, Dia, Chromium, Firefox and desktop browser histories. It runs on request. For conversations missing from browser history, import a ChatGPT export ZIP or a conversations JSON file. The picker keeps titles, conversation IDs and dates. Only pinned links appear in the notch. [Export instructions](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data)
+
 ## Add a conversation
 
 Copy the address of a conversation you own from ChatGPT's web address bar. Use a direct URL of the form `https://chatgpt.com/c/<UUID>`. A title is stored locally. From the project root, run the following command with that address and your chosen title.

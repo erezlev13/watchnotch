@@ -53,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.submenu = submenu
         }
         NSApp.mainMenu = main
-        store = Store(root: root, directory: sessions)
+        let display = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main
+        store = Store(root: root, directory: sessions, displayWidth: display?.visibleFrame.width ?? 1440)
         for pin in store.saved.watches ?? [] where store.saved.pins.contains(pin) {
             if pin.provider == "Codex" { _ = store.watchCodex(pin.sessionID) }
         }
@@ -69,13 +70,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let show = menu.addItem(withTitle: "Show or hide sessions",action: #selector(toggle),keyEquivalent: "")
         show.target = self
+        menu.addItem(withTitle: "Session library…", action: #selector(showLibrary), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit watchnotch",action: #selector(NSApplication.terminate(_:)),keyEquivalent: "q")
         status.menu = menu
         NotificationCenter.default.addObserver(self,selector: #selector(layout),name: NSApplication.didChangeScreenParametersNotification,object: nil)
-        state.expanded = firstLaunch || capture != nil || env["NOTCH_EXPANDED"] == "1"
+        state.managing = CommandLine.arguments.contains("--session-library")
+        state.expanded = state.managing || firstLaunch || capture != nil || env["NOTCH_EXPANDED"] == "1"
         if capture != nil { store.tick(now: Date().addingTimeInterval(10)) }
-        panel.contentView = NSHostingView(rootView: PanelView(store: store, panel: state, toggle: { [weak self] in self?.toggle() }))
+        let hosting = NSHostingView(rootView: PanelView(store: store, panel: state, toggle: { [weak self] in self?.toggle() }))
+        hosting.sizingOptions = []
+        panel.contentView = hosting
         // Update window geometry independently so pinning or incoming events preserve field focus.
         Publishers.MergeMany(state.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
                              store.$saved.map { $0.pins.count }.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
@@ -91,6 +96,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 do { try png.write(to: URL(fileURLWithPath: capture)); NSApp.terminate(nil) } catch { exit(1) }
             }
         }
+    }
+
+    @objc private func showLibrary() {
+        state.expanded = true
+        state.managing = true
+        layout()
+        panel.makeKeyAndOrderFront(nil)
     }
 
     @objc private func toggle() {
@@ -109,13 +121,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let center = hasNotch ? (left!.maxX + right!.minX)/2 : screen.frame.midX
         let expanded = state.expanded
         let band = expanded && !state.managing
-        let expandedWidth = band ? screen.frame.width : min(466,screen.visibleFrame.width)
-        if state.displayWidth != screen.frame.width { state.displayWidth = screen.frame.width }
-        let expandedHeight = state.managing ? CGFloat(470) : (store.pinned.isEmpty ? 96 : state.rowHeight + 40) + (store.notice == nil ? 0 : 40)
+        let tiles = TileLayout(available: screen.visibleFrame.width)
+        let expandedWidth = band ? tiles.rowWidth(for: store.pinned.count) : min(540, screen.visibleFrame.width)
+        if store.pinLimit != tiles.capacity { store.pinLimit = tiles.capacity }
+        if state.displayWidth != screen.visibleFrame.width { state.displayWidth = screen.visibleFrame.width }
+        let expandedHeight = state.managing ? CGFloat(580) : (store.pinned.isEmpty ? 96 : state.rowHeight + 40) + (store.notice == nil ? 0 : 40)
         let width: CGFloat = expanded ? expandedWidth : max(120,widthOfNotch + 104)
         let height: CGFloat = expanded ? min(expandedHeight,screen.visibleFrame.height - 12) : max(24,screen.safeAreaInsets.top)
         let top = hasNotch && !expanded ? screen.frame.maxY : min(screen.visibleFrame.maxY, screen.frame.maxY - screen.safeAreaInsets.top)
-        let rect = NSRect(x: band ? screen.frame.minX : center - width/2,y: top - height,width: width,height: height)
+        let rect = NSRect(x: min(screen.visibleFrame.maxX - width, max(screen.visibleFrame.minX, center - width/2)),y: top - height,width: width,height: height)
         panel.setFrame(rect,display: true)
         panel.hasShadow = false
         panel.orderFrontRegardless()

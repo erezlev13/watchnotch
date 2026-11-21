@@ -6,6 +6,8 @@ final class Store: ObservableObject {
     @Published private(set) var cards: [Identity: Card] = [:]
     @Published private(set) var saved = Saved()
     @Published var notice: String?
+    @Published var pinLimit: Int
+    @Published private(set) var importedChats: [LibraryItem] = []
     private let root: URL
     let directory: URL
     private var timer: AnyCancellable?
@@ -15,7 +17,8 @@ final class Store: ObservableObject {
     private let fs = FileManager.default
     private let fixtureTitles = ["Notch companion", "Market research", "Weekly brief", "Market research", "Release notes", "Interview guide"]
 
-    init(root: URL, directory: URL, ticking: Bool = true) {
+    init(root: URL, directory: URL, ticking: Bool = true, displayWidth: CGFloat = 1440) {
+        pinLimit = TileLayout(available: displayWidth).capacity
         self.root = root
         self.directory = directory
         do {
@@ -28,6 +31,10 @@ final class Store: ObservableObject {
             do { saved = try Format.decoder().decode(Saved.self, from: readPrivateFile(savedFile, limit: 4 * 1024 * 1024)) }
             catch { notice = "Could not load saved pins: " + error.localizedDescription }
         }
+        let importedFile = root.appendingPathComponent("chat-library.json")
+        if let data = try? readPrivateFile(importedFile, limit: 16 * 1024 * 1024) {
+            importedChats = (try? JSONDecoder().decode([LibraryItem].self, from: data)) ?? []
+        }
         for var snapshot in saved.lastKnown {
             snapshot.state = .unavailable
             snapshot.request = nil
@@ -35,7 +42,7 @@ final class Store: ObservableObject {
             put(Card(value: snapshot, origin: .adapter))
         }
         resetDemo()
-        if !existing { saved.pins = [fixtureID(0),fixtureID(1),fixtureID(2)]; persist() }
+        if !existing { saved.pins = Array([fixtureID(0),fixtureID(1),fixtureID(2)].prefix(pinLimit)); persist() }
         tick()
         if ticking {
             timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.tick() }
@@ -82,9 +89,21 @@ final class Store: ObservableObject {
         do { try Format.encoder().encode(saved).write(to: root.appendingPathComponent("selection.json"), options: .atomic) }
         catch { notice = "Could not save pins: " + error.localizedDescription }
     }
+    func saveChatLibrary(_ items: [LibraryItem]) throws {
+        var merged: [Identity: LibraryItem] = [:]
+        for item in importedChats + items where item.provider == "ChatGPT" && UUID(uuidString: item.sessionID) != nil {
+            merged[item.id] = item
+        }
+        let ordered = merged.values.sorted { $0.updated > $1.updated }
+        let data = try JSONEncoder().encode(ordered)
+        guard data.count <= 16 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
+        try data.write(to: root.appendingPathComponent("chat-library.json"), options: .atomic)
+        importedChats = ordered
+    }
+
     func pin(_ id: Identity) {
         guard cards[id] != nil, !saved.pins.contains(id) else { return }
-        guard saved.pins.count < 5 else { notice = "Unpin a session to make room."; return }
+        guard saved.pins.count < pinLimit else { notice = "Unpin a session to make room."; return }
         saved.pins.append(id)
         persist()
     }
@@ -110,7 +129,7 @@ final class Store: ObservableObject {
                                 updatedAt: Date(), sessionURL: url)
         let file = directory.appendingPathComponent("chatgpt-" + id + ".json")
         let card = Card(value: snapshot, origin: .adapter, source: file)
-        guard saved.pins.contains(card.id) || saved.pins.count < 5 else { notice = "Unpin a session to make room."; return false }
+        guard saved.pins.contains(card.id) || saved.pins.count < pinLimit else { notice = "Unpin a session to make room."; return false }
         do { try Format.encoder().encode(snapshot).write(to: file, options: .atomic) }
         catch { notice = error.localizedDescription; return false }
         put(card)
@@ -134,7 +153,7 @@ final class Store: ObservableObject {
             return false
         }
         let id = Identity(origin: .adapter, provider: "Codex", sessionID: uuid.uuidString.lowercased())
-        guard saved.pins.contains(id) || saved.pins.count < 5 else { notice = "Unpin a session to make room."; return false }
+        guard saved.pins.contains(id) || saved.pins.count < pinLimit else { notice = "Unpin a session to make room."; return false }
         guard let script = Bundle.main.url(forResource: "monitor", withExtension: "py") else {
             notice = "The Codex monitor is missing from this app bundle."
             return false

@@ -37,10 +37,7 @@ struct PanelView: View {
     @ObservedObject var panel: PanelState
     let toggle: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var source = "ChatGPT"
-    @State private var link = ""
-    @State private var title = ""
-    @State private var webLink = ""
+    @StateObject private var library = SessionLibrary()
     var body: some View {
         Group {
             if !panel.expanded {
@@ -59,7 +56,7 @@ struct PanelView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "rectangle.split.3x1").foregroundStyle(accent)
                         Text(panel.managing ? "Manage sessions" : "Pinned sessions").font(.system(size: 12,weight: .semibold))
-                        Text("\(store.pinned.count)/5").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        Text("\(store.pinned.count)/\(store.pinLimit)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                         Divider().frame(height: 12)
                         Button { panel.managing.toggle(); store.notice = nil } label: {
                             Image(systemName: panel.managing ? "checkmark" : "slider.horizontal.3")
@@ -74,15 +71,13 @@ struct PanelView: View {
                         }.padding(8).background(.black.opacity(0.88),in: Capsule())
                     }
                     if panel.managing {
-                        ScrollView { manage.padding(16) }
-                            .background(.black.opacity(0.88),in: RoundedRectangle(cornerRadius: 16))
+                        SessionSettings(store: store, library: library)
                     } else if store.pinned.isEmpty {
                         Button("Pin a session") { panel.managing = true }
                             .padding(10).background(.black.opacity(0.82),in: Capsule())
                     } else {
-                        let count = CGFloat(store.pinned.count)
-                        let gap: CGFloat = 16
-                        let width = max(216,(panel.displayWidth - 32 - (count - 1) * gap) / count)
+                        let gap = TileLayout.gap
+                        let width = TileLayout(available: panel.displayWidth).tileWidth(for: store.pinned.count)
                         ScrollView([.horizontal,.vertical],showsIndicators: false) {
                             HStack(alignment: .top,spacing: gap) {
                                 ForEach(Array(store.pinned.enumerated()), id: \.element.id) { index, card in
@@ -116,38 +111,6 @@ struct PanelView: View {
             .environment(\.colorScheme,.dark)
     }
 
-    private var manage: some View {
-        VStack(alignment: .leading,spacing: 10) {
-            Picker("Add session",selection: $source) {
-                Text("ChatGPT").tag("ChatGPT")
-                Text("Codex").tag("Codex")
-            }.pickerStyle(.segmented)
-            TextField(source == "ChatGPT" ? "Private conversation URL" : "Thread ID or codex://threads/ link", text: $link).textFieldStyle(.roundedBorder)
-            if source == "ChatGPT" { TextField("Session title",text: $title).textFieldStyle(.roundedBorder) }
-            if source == "Codex" {
-                TextField("Web link for this thread (optional)",text: $webLink).textFieldStyle(.roundedBorder)
-            }
-            Button(source == "ChatGPT" ? "Pin conversation link" : "Watch Codex thread") {
-                let success = source == "ChatGPT" ? store.addChat(link,title: title) : store.watchCodex(link,webLink: webLink)
-                if success { link = ""; title = ""; webLink = ""; panel.managing = false }
-            }.buttonStyle(.bordered).disabled(link.isEmpty)
-            Divider()
-            ForEach(store.catalog) { card in
-                let pinned = store.saved.pins.contains(card.id)
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(card.value.title).font(.callout.weight(.medium))
-                        Text(card.value.provider + " · " + card.label).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(pinned ? "Unpin" : "Pin") { if pinned { store.unpin(card.id) } else { store.pin(card.id) } }
-                        .buttonStyle(.bordered).disabled(!pinned && store.saved.pins.count >= 5)
-                }
-            }
-            Divider()
-            Button("Replay demo events") { store.resetDemo(); panel.managing = false }.foregroundStyle(accent)
-        }
-    }
 }
 
 private struct SessionTile: View {
@@ -255,7 +218,7 @@ private struct SessionTile: View {
             .overlay { shape.strokeBorder(.white.opacity(hovered ? 0.38 : 0.20),lineWidth: 1) }
             .shadow(color: .black.opacity(0.27),radius: 5,y: 4)
              .scaleEffect(reduceMotion || entered ? 1 : 0.88,anchor: .top)
-            .offset(x: reduceMotion || entered ? 0 : (panel.displayWidth / 2 - (16 + (width + 16) * CGFloat(index) + width / 2)) * 0.12,
+            .offset(x: reduceMotion || entered ? 0 : (TileLayout(available: panel.displayWidth).rowWidth(for: store.pinned.count) / 2 - (16 + (width + TileLayout.gap) * CGFloat(index) + width / 2)) * 0.12,
                     y: reduceMotion ? 0 : (!entered ? -20 : (hovered ? -2 : 0)))
             .opacity(entered || reduceMotion ? 1 : 0)
             .onAppear {
