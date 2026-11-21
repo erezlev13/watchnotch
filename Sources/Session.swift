@@ -45,6 +45,8 @@ struct Card: Identifiable, Equatable {
     var value: Snapshot
     let origin: Origin
     var source: URL?
+    var quietChat = false
+    var connected: Bool { value.state != .unavailable }
     var id: Identity { Identity(origin: origin, provider: value.provider, sessionID: value.sessionID) }
 }
 
@@ -137,6 +139,7 @@ struct LibraryItem: Codable, Identifiable {
     let updated: Double
     var state: SessionState?
     var work: Bool?
+    var desktopChat: Bool?
     var activityText: String?
     var parentID: String?
     var branchKind: String?

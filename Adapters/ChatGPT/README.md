@@ -1,6 +1,6 @@
 # ChatGPT desktop
 
-Pin a conversation from the session library or paste a private ChatGPT conversation URL. The library checks the local desktop catalog for conversation IDs, titles, dates and reported activity. Recent active-turn records can surface a Work conversation before its title arrives. Pinned conversations refresh in the background. The tile can show statuses such as “Writing a response,” “Working in the background” and “A new response is ready.” The catalog supplies activity metadata only.
+Pin a conversation from the session library or paste a private ChatGPT conversation URL. The library checks the local desktop catalog for conversation IDs, titles, dates and reported activity. Recent active-turn records can surface a Work conversation before its title arrives. Pinned Chat and Work conversations refresh in the background, including while the notch is collapsed. **Watching** means the running desktop app has indexed the pin and currently reports no turn activity. A newer catalog timestamp can surface an update between polls. Closing the desktop app takes its indexed pins offline. Reopening it resumes monitoring. The tile can show statuses such as “Writing a response,” “Working in the background” and “A new response is ready.” The catalog supplies activity metadata only.
 
 Type a follow-up below **Jump in**. **Copy & open** places that tile’s draft on the clipboard and opens the conversation for you to paste and send. **Jump in** tries to select the chat in the running desktop app. The globe button opens its private URL in your browser.
 

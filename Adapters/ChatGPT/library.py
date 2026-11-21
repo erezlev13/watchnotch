@@ -115,7 +115,7 @@ def desktop_items(directory, launched=None):
                 descriptions = {1: "ChatGPT is working on your request.", 3: "ChatGPT is writing a reply.",
                                 4: "A new reply is ready to read.", 5: "Your conversation is active.",
                                 6: "ChatGPT is working on your request.", 7: "Work is continuing in the background."}
-                if async_status in descriptions:
+                if launched is not None and async_status in descriptions:
                     normalized["state"] = "ready" if async_status == 4 else "running"
                     normalized["activityText"] = descriptions[async_status]
                 chats[normalized["sessionID"]] = normalized
