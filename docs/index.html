@@ -4,8 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fcf8f1">
-  <meta name="description" content="Pin Codex and ChatGPT sessions to your Mac notch. Explore live updates, replies and approvals, plus Claude support and session controls in the local preview.">
-  <title>watchnotch — Your AI sessions at a glance</title>
+  <meta name="description" content="Watch your AI conversations at a glance. Pin parallel sessions for research, writing, learning, planning and coding; follow updates and jump back into the right task.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="watchnotch — More AI sessions. Less switching.">
+  <meta property="og:description" content="A productivity companion for anyone following parallel AI conversations: research, writing, planning, learning and coding.">
+  <meta name="twitter:card" content="summary">
+  <title>watchnotch — All your AI sessions, one clear view</title>
   <link rel="icon" type="image/png" href="media/owl-small.png">
   <link rel="stylesheet" href="style.css">
   <script src="tour.js" defer></script>
@@ -13,30 +17,44 @@
 <body>
 <header>
   <a class="brand" href="./" aria-label="watchnotch home"><img src="media/owl-small.png" alt="" width="46" height="46">watchnotch</a>
-  <nav aria-label="Main navigation"><a href="#tour">Film</a><a href="#guide">Guide</a><a href="#try">Try it</a><a href="https://github.com/erezlev13/watchnotch">GitHub ↗</a></nav>
+  <nav aria-label="Main navigation"><a href="#everyone">For everyone</a><a href="#tour">Demo</a><a href="#try">Mac &amp; Windows</a><a href="https://github.com/erezlev13/watchnotch">GitHub ↗</a></nav>
 </header>
 <main>
   <section class="hero">
     <div class="herocopy">
-      <h1>Your sessions,<br><em>within reach.</em></h1>
+      <h1>More AI sessions.<br><em>Less switching.</em></h1>
       <div class="intro">
-        <p>Pin Codex and ChatGPT to your Mac notch. The owl follows the latest update, so you can see which session needs you while you work. The local preview also follows Claude chats and coding sessions.</p>
-        <div class="actions"><a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.7/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a><a class="watch" href="#tour">Watch the film <span aria-hidden="true">↘</span></a></div>
-        <small>Apple silicon · macOS 13 or later · Preview 0.1.7</small>
+        <p>Keep up with your AI conversations while you research, write, learn, plan or code. Pin up to five independent sessions, see what changed and what needs you, and jump back in without hunting through windows.</p><p class="hero-availability"><strong>Available for macOS and Windows.</strong> Mac has a downloadable preview; Windows has a source-run preview. Features vary by platform and provider. More AI integrations are on the roadmap.</p>
+        <div class="actions"><a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.7/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a><a class="download download-alt" href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md#run">Run on Windows <span aria-hidden="true">↗</span></a><a class="watch" href="#tour">Watch the demo</a></div>
+        <small>Mac: Apple silicon · macOS 13+ · Preview 0.1.7 &nbsp;|&nbsp; Windows: Python 3.9+ source preview</small>
       </div>
     </div>
     <img class="owl" src="media/watchnotch-owl.png" alt="The brown watchnotch owl looking up" width="1254" height="1254">
   </section>
 
+  <section id="everyone" class="for-everyone" aria-labelledby="everyone-title">
+    <div class="section-heading"><h2 id="everyone-title">Made for people.<br><em>Not just developers.</em></h2><span>One view for your parallel AI work</span></div>
+    <p class="everyone-lead">Your AI sessions don't all belong to one project, profession or provider. Follow the conversations you care about without combining them or losing your place.</p>
+    <div class="use-cases">
+      <article><small>Explore</small><h3>Research &amp; learning</h3><p>Compare options, study a topic or follow a long-running investigation.</p></article>
+      <article><small>Organize</small><h3>Planning &amp; projects</h3><p>Keep trip ideas, personal projects and business plans within reach.</p></article>
+      <article><small>Create</small><h3>Writing &amp; creativity</h3><p>Move between drafts, brainstorming sessions and feedback.</p></article>
+      <article><small>Build</small><h3>Development &amp; agents</h3><p>Track coding tasks and approvals alongside your other AI conversations.</p></article>
+    </div>
+    <p class="provider-note"><strong>All providers is the direction, not a claim about today's build.</strong> Existing support varies by app and version. The current Mac preview centers on Codex and ChatGPT; Claude is in development. We plan to investigate Qwen, Kimi, DeepSeek, MiniMax and more. <a href="https://github.com/erezlev13/watchnotch/blob/main/docs/PRODUCT_VISION.md">Read the product vision and provider roadmap</a>.</p>
+  </section>
+
   <section id="tour" aria-labelledby="tour-title">
-    <div class="section-heading"><h2 id="tour-title">Inside the notch.</h2><span>Mac feature film · 1 min 4 sec</span></div>
+    <div class="section-heading"><h2 id="tour-title">Watch WatchNotch in action.</h2><span>Mac feature walkthrough · 1 min 4 sec</span></div>
     <figure>
-      <video id="film" aria-label="Watchnotch Mac feature film" aria-describedby="film-caption" width="1920" height="1080" controls playsinline preload="none" poster="media/feature-tour.jpg">
+      <video id="film" aria-label="Watchnotch Mac feature walkthrough" aria-describedby="film-caption film-help" width="1920" height="1080" controls playsinline preload="metadata" poster="media/feature-tour.jpg">
         <source src="media/feature-tour.mp4" type="video/mp4">
         <track kind="captions" src="media/feature-tour.vtt" srclang="en" label="English descriptions">
         <a href="media/feature-tour.mp4">Open the feature film</a>
       </video>
-      <figcaption id="film-caption">A silent walkthrough with example sessions from Mac preview 0.1.7, the public source and local preview <code>177379b</code>. Jump to a moment below.</figcaption>
+      <figcaption id="film-caption">This walkthrough shows the Mac experience, not Windows. It combines features from preview 0.1.7, the public source build and local development builds. Some features shown are not in the download.</figcaption>
+      <p id="film-help" class="film-help">Having trouble playing the video? <a href="media/feature-tour.mp4" download>Download the MP4</a> or <a href="media/sessions.gif">see the lightweight animated session preview</a>.</p>
+      <div id="film-error" class="film-error" role="status" hidden><strong>This video could not play in your browser.</strong><p>Try the <a href="media/feature-tour.mp4" download>MP4 download</a> or view the <a href="media/sessions.gif">animated preview</a> instead.</p><img src="media/sessions.gif" width="900" height="480" loading="lazy" alt="Animated preview of WatchNotch session tiles"></div>
     </figure>
     <nav class="chapters" aria-label="Film chapters">
       <a href="media/feature-tour.mp4#t=0"><time datetime="PT0S">0:00</time>Pin a session</a>
@@ -63,9 +81,10 @@
   </section>
 
   <section id="try" class="try" aria-labelledby="try-title">
-    <div><h2 id="try-title">Try it on<br><em>your Mac.</em></h2><p class="platform-link">On Windows? <a href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md">Run the Windows preview ↗</a></p></div>
+    <div><h2 id="try-title">Try it on<br><em>Mac or Windows.</em></h2><p class="platform-link">Both desktop previews help you track parallel AI sessions. The Mac build is downloadable; Windows currently runs from source. Follow the guide for your platform.</p><div class="platform-actions"><a class="platform-card" href="https://github.com/erezlev13/watchnotch/releases/tag/v0.1.7"><strong>macOS</strong><span>Download Mac preview 0.1.7</span></a><a class="platform-card" href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md#run"><strong>Windows</strong><span>Run the Python desktop preview</span></a></div></div>
     <div class="steps">
       <article><small>Mac download · 0.1.7</small><h3>Follow your first session</h3><p>Unzip the download and open watchnotch. Click the notch strip to see three demo sessions. Open the sliders to pin a real Codex thread or ChatGPT conversation. Click a status sentence to reveal the whole update.</p><p>The preview is ad-hoc signed. If macOS blocks it, you can <a href="https://github.com/erezlev13/watchnotch/blob/v0.1.7/README.md#build-and-open">build the preview locally</a>.</p></article>
+      <article><small>Windows source preview</small><h3>Follow sessions on Windows</h3><p>Install Python 3.9+ and Tkinter, then run <code>py -3 windows\watchnotch.pyw</code> from the repository. Search and pin sessions, follow reported activity, inspect available Codex usage, and open the right conversation. A connected Codex thread can receive text; ChatGPT drafts use <strong>Copy &amp; open</strong>. <a href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md">Full Windows setup instructions</a>.</p></article>
       <article><small>Mac source build</small><h3>Answer from the tile</h3><p>When a session asks a question, its choices appear in the tile. Pick an option, or select each answer and click <strong>Send answers</strong> for a group of questions. Review a supported approval and choose <strong>Approve once</strong> or <strong>Deny</strong>.</p></article>
       <article><small>Mac source build</small><h3>Reply to the conversation</h3><p>Type below <strong>Jump in</strong> and press Return to send to a connected Codex thread or desktop ChatGPT conversation. For ChatGPT, keep the conversation open and grant watchnotch Accessibility access in System Settings. Use <strong>Copy &amp; open</strong> when a handoff is needed.</p><p><a href="https://github.com/erezlev13/watchnotch/blob/main/mac/README.md#build-and-open">Build the Mac app from source ↗</a></p></article>
       <article><small>In development · Mac</small><h3>Read a reply and send a screenshot</h3><p>The development build can preview the last assistant reply seen in an open, pinned ChatGPT conversation with Accessibility access. Paste one screenshot into a tile and add a multiline caption. Connected Codex threads receive both together. For ChatGPT, choose <strong>Copy image &amp; open</strong>, then paste and send in the conversation.</p></article>

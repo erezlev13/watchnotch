@@ -4,7 +4,7 @@
 
 [Mac preview 0.1.7](https://github.com/erezlev13/watchnotch/releases/tag/v0.1.7) · [Website](https://erezlev13.github.io/watchnotch/)
 
-Watch selected ChatGPT Chat and Work conversations and Codex threads from the notch on your Mac. Click the strip by the camera or use the menu bar item to expand the pinned row. The owl follows the latest live update. Each tile shows one sentence about progress, a result, or what needs your attention. Its lines appear from top to bottom. An arriving update waits for the current sentence to finish and gives you time to read it. Click the sentence to reveal it immediately, or enable Reduce Motion to see it in full.
+Watch AI conversations and agents side by side while you research, write, study, plan or code. **WatchNotch is for anyone using parallel AI sessions, not just developers.** The current Mac build supports selected ChatGPT Chat and Work conversations and Codex threads; additional providers have different levels of support. Click the strip by the camera or use the menu bar item to expand the pinned row. The owl follows the latest live update. Each tile shows one sentence about progress, a result, or what needs your attention. Its lines appear from top to bottom. An arriving update waits for the current sentence to finish and gives you time to read it. Click the sentence to reveal it immediately, or enable Reduce Motion to see it in full.
 
 A subagent appears inside its pinned parent while working or waiting for input and disappears when its turn ends. Click a subagent or fork to open its thread. Each pinned tile is at most 300 points wide. Your display determines how many fit. On a smaller screen, scroll horizontally to reach existing pins.
 
