@@ -33,8 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = main
         store = Store(root: root, directory: sessions)
         for pin in store.saved.watches ?? [] where store.saved.pins.contains(pin) {
-            let address = store.cards[pin]?.value.sessionURL?.absoluteString ?? pin.sessionID
-            _ = store.watchCodex(address)
+            if pin.provider == "Codex" { _ = store.watchCodex(pin.sessionID) }
         }
         panel = NotchPanel(contentRect: .zero,styleMask: [.borderless,.nonactivatingPanel],backing: .buffered,defer: false)
         panel.isOpaque = false
@@ -103,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) { store?.stopMonitors() }
 }
 
+umask(0o077)
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let delegate = AppDelegate()

@@ -227,9 +227,11 @@ private struct SessionTile: View {
                         Text(card.value.updatedAt,style: .time).font(.caption2.monospacedDigit()).foregroundStyle(.white.opacity(0.66))
                     }
                     Spacer()
-                    if let url = card.value.resultURL, Format.canOpen(url,result: true,provider: card.value.provider) {
+                    if let url = card.value.resultURL, Format.resultViewer(url) != nil || Format.webResult(url) {
                         Button {
-                            if !NSWorkspace.shared.open(url) { store.notice = "macOS could not open this destination." }
+                            Task { @MainActor in
+                                if !(await SessionJump.openResult(url)) { store.notice = "macOS could not open this destination." }
+                            }
                         } label: { Label("Open result",systemImage: "arrow.up.right").font(.caption.weight(.medium)).foregroundStyle(accent) }
                     }
                 }
