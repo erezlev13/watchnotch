@@ -122,11 +122,14 @@ final class SessionLibrary: ObservableObject {
         activity = current
     }
 
-    func refreshBranches(for parents: [String]) async {
+    func refreshBranches(for parents: [String], includeForks: Bool) async {
         guard !parents.isEmpty else { branches = [:]; return }
-        let page = try? await Self.read("monitor", arguments: ["--branches"] + parents)
+        let options = includeForks ? [] : ["--active-agents-only"]
+        let page = try? await Self.read("monitor", arguments: options + ["--branches"] + parents)
         guard !Task.isCancelled else { return }
-        branches = Dictionary(grouping: (page?.items ?? []).filter { $0.parentID != nil }, by: { $0.parentID ?? "" })
+        let savedForks = includeForks && page != nil ? [] : parents.flatMap { branches[$0] ?? [] }.filter { $0.branchKind == "Fork" }
+        let rows = (page?.items ?? []) + savedForks
+        branches = Dictionary(grouping: rows.filter { $0.parentID != nil }, by: { $0.parentID ?? "" })
     }
 
     func findChats(file: URL?, store: Store) async {

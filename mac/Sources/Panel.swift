@@ -132,10 +132,12 @@ struct PanelView: View {
             }
         }.task(id: branchParents) {
             let parents = branchParents
+            var poll = 0
             repeat {
-                await library.refreshBranches(for: parents)
+                await library.refreshBranches(for: parents, includeForks: poll.isMultiple(of: 12))
+                poll += 1
                 if parents.isEmpty || Task.isCancelled { return }
-                do { try await Task.sleep(nanoseconds: 12_000_000_000) } catch { return }
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
             } while !Task.isCancelled
         }.buttonStyle(.plain).foregroundStyle(Color.white)
             .environment(\.colorScheme,.dark)
@@ -286,7 +288,7 @@ private struct SessionTile: View {
                                 if let route = SessionJump(card: child) { navigate(route) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Label((branch.branchKind ?? "Branch") + " · " + child.stateName, systemImage: "arrow.triangle.branch")
+                                    Label(branch.branchKind == "Fork" && branch.state == .unavailable ? "Fork" : (branch.branchKind ?? "Branch") + " · " + child.stateName, systemImage: "arrow.triangle.branch")
                                         .font(.caption2).foregroundStyle(child.tint)
                                     Text(branch.title).font(.caption.weight(.semibold)).lineLimit(1)
                                 }.padding(.horizontal, 8).padding(.vertical, 5)
@@ -380,52 +382,70 @@ private struct TypedStatus: View {
     let id: Identity
     let panel: PanelState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var visible = ""
-    @State private var typing = false
-    @State private var entrance: CGFloat = 1
+    @State private var script = StatusScript()
+
+    private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     var body: some View {
-        // Reserve the final sentence's space so typing never shifts the decision buttons.
-        Text(sentence).hidden().accessibilityHidden(true)
-            .overlay(alignment: .topLeading) {
-                Text("\(reduceMotion ? sentence : visible)\(Text(typing && !reduceMotion ? "▏" : "").foregroundColor(accent))").foregroundStyle(.white)
-                    .opacity(reduceMotion ? 1 : 0.35 + 0.65 * entrance)
-                    .offset(y: reduceMotion ? 0 : 5 * (1 - entrance))
-                    .accessibilityHidden(true)
-            }
-            .font(.system(size: 13,weight: .medium,design: .monospaced))
+        let displayed = script.current ?? sentence
+        Text(displayed)
+            .font(.system(size: 13, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white)
+            .lineSpacing(2)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .mask {
+                if script.current == nil && !reduceMotion && panel.shownSentences[id] != sentence {
+                    Color.clear
+                } else if script.phase == .revealing && !reduceMotion {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { _ in
+                        GeometryReader { bounds in
+                            // A soft edge travels down the final laid-out paragraph,
+                            // revealing each wrapped line in place without moving the controls.
+                            let height = max(1, bounds.size.height)
+                            let feather = min(14, height)
+                            let edge = script.progress(at: now) * (height + feather)
+                            LinearGradient(stops: [
+                                .init(color: .white, location: 0),
+                                .init(color: .white, location: max(0, (edge - feather) / height)),
+                                .init(color: .clear, location: min(1, edge / height)),
+                                .init(color: .clear, location: 1)
+                            ], startPoint: .top, endPoint: .bottom)
+                        }
+                    }
+                } else {
+                    Color.white
+                }
+            }
             .contentShape(Rectangle())
-            .onTapGesture { visible = sentence; typing = false }
-            .help(typing ? "Click to read the full update now" : sentence)
+            .onTapGesture { script.reveal(at: now) }
+            .help(script.phase == .revealing ? "Click to read the full update now" : displayed)
             .accessibilityElement(children: .ignore)
-            .accessibilityHidden(false)
-            .accessibilityLabel(sentence)
-            .accessibilityAction(named: "Reveal full update") { visible = sentence; typing = false }
-            .task(id: sentence) {
-                if reduceMotion || panel.shownSentences[id] == sentence {
-                    visible = sentence
-                    entrance = 1
-                    typing = false
-                    return
+            .accessibilityLabel(displayed)
+            .accessibilityAction(named: "Reveal full update") { script.reveal(at: now) }
+            .onAppear {
+                script.receive(sentence, at: now, animate: !reduceMotion && panel.shownSentences[id] != sentence)
+            }
+            .onChange(of: sentence) { update in
+                script.receive(update, at: now, animate: !reduceMotion)
+            }
+            .onChange(of: reduceMotion) { reduced in
+                if reduced { script.reveal(at: now) }
+            }
+            .onDisappear {
+                panel.shownSentences[id] = script.current
+                script = StatusScript()
+            }
+            .task(id: script.deadline) {
+                guard let deadline = script.deadline else { return }
+                while now < deadline {
+                    let delay = max(0, deadline - now)
+                    do { try await Task.sleep(nanoseconds: UInt64(ceil(delay * 1_000_000_000))) }
+                    catch { return }
                 }
-                panel.shownSentences[id] = sentence
-                visible = ""
-                entrance = 0
-                typing = true
-                withAnimation(.easeOut(duration: 0.65)) { entrance = 1 }
-                for character in sentence {
-                    guard !Task.isCancelled, typing else { return }
-                    visible.append(character)
-                    let pause: UInt64
-                    if ".!?".contains(character) { pause = 340 }
-                    else if ",:—;".contains(character) { pause = 190 }
-                    else { pause = character.isWhitespace ? 64 : 43 }
-                    do { try await Task.sleep(nanoseconds: pause * 1_000_000) } catch { return }
-                }
-                typing = false
+                guard !Task.isCancelled, script.deadline == deadline else { return }
+                script.advance(at: now, animate: !reduceMotion)
             }
     }
 }
