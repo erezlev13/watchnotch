@@ -59,3 +59,16 @@ The broad "AI in the Mac notch" space is competitive. The working estimate of 10
 - Maintain a provider capability matrix; make Qwen Code and Kimi Code CLI the first Chinese-origin harness spike.
 - Test the name **WatchNotch** against alternatives such as SessionNest, ThreadNest and OwlDesk. No rebrand until availability, trademark and customer comprehension have been investigated.
 - Track work in the repository's [GitHub issues](https://github.com/erezlev13/watchnotch/issues). The product strategy and workstream live in the [WatchNotch Space](https://chatgpt.com/space/page_6b0170689bfc8191894b3d0655910426).
+
+## GitHub follow-up tracker
+
+These issues make the discussion actionable; they are **planned work, not shipped features**.
+
+1. **Audience-first UX and user testing:** [#10](https://github.com/erezlev13/watchnotch/issues/10) — highest priority.
+2. **Competitor comparison and differentiation:** [#11](https://github.com/erezlev13/watchnotch/issues/11).
+3. **Provider-neutral session architecture:** [#12](https://github.com/erezlev13/watchnotch/issues/12).
+4. **Qwen and Kimi CLI adapter POC:** [#13](https://github.com/erezlev13/watchnotch/issues/13).
+5. **MiniMax/DeepSeek/ZCode/TRAE/Qoder research:** [#14](https://github.com/erezlev13/watchnotch/issues/14).
+6. **Ordinary consumer AI chat interoperability:** [#15](https://github.com/erezlev13/watchnotch/issues/15).
+7. **Name and branding research:** [#16](https://github.com/erezlev13/watchnotch/issues/16).
+8. **Mixed-purpose end-to-end demo and metrics:** [#17](https://github.com/erezlev13/watchnotch/issues/17).
