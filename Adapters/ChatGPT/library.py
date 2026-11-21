@@ -112,9 +112,9 @@ def desktop_items(directory, launched=None):
             if normalized:
                 if surface == "tpp":
                     normalized["work"] = True
-                descriptions = {1: "Working on the request", 3: "Writing a response",
-                                4: "A new response is ready", 5: "Working in ChatGPT",
-                                6: "Processing the current turn", 7: "Working in the background"}
+                descriptions = {1: "ChatGPT is working on your request.", 3: "ChatGPT is writing a reply.",
+                                4: "A new reply is ready to read.", 5: "Your conversation is active.",
+                                6: "ChatGPT is working on your request.", 7: "Work is continuing in the background."}
                 if async_status in descriptions:
                     normalized["state"] = "ready" if async_status == 4 else "running"
                     normalized["activityText"] = descriptions[async_status]
@@ -136,9 +136,9 @@ def desktop_items(directory, launched=None):
                     pending["title"] = "New ChatGPT conversation · " + key[:8]
                     row = chats.setdefault(key, pending)
                     row["updated"] = max(row["updated"], pending["updated"])
+                    if row.get("state") != "running":
+                        row["activityText"] = "ChatGPT is working on your request."
                     row["state"] = "running"
-                    if row.get("activityText") not in ("Writing a response", "Working in the background"):
-                        row["activityText"] = "Working on the current turn"
         yield from chats.values()
 
 def browser_items(home):
