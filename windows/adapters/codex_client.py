@@ -111,10 +111,30 @@ def short_text(value, limit=148):
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"https?://\S+|(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{10,}", "…", text)
     text = " ".join(text.replace("*", "").replace("`", "").split()).strip("# -")
-    text = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
     if len(text) > limit:
-        text = text[:limit - 1].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+        text = (text[:limit - 1].rsplit(" ", 1)[0] or text[:limit - 1]).rstrip(".,;:") + "…"
     return text
+
+
+# Prefer a concrete clause over a greeting, an acknowledgement or a Markdown heading.
+ACK = r"(?:yes|no|ok(?:ay)?|sure|absolutely|certainly|done|great|got it|of course|you're right|good (?:question|point)|thanks(?: for (?:asking|the context))?)"
+
+
+def message_gist(value):
+    visible = re.sub(r"```.*?(?:```|$)", " ", value or "", flags=re.S)
+    for raw in visible.splitlines():
+        line = re.sub(r"^\s*(?:[-+*•]\s+|\d+[.)]\s+)", "", raw).strip()
+        if not line or line.startswith(("#", ">")) or line.endswith(":"):
+            continue
+        for clause in re.split(r"(?<=[.!?])\s+", line):
+            clause = short_text(clause, 500)
+            clause = re.sub(r"^" + ACK + r"(?:\s*[,!:—–-]\s*|[.!?]*$)", "", clause, flags=re.I)
+            preamble = r"(?:summary|result|what changed|here.s (?:the gist|what (?:I|we) found)|(?:let me|I.ll) (?:check|take a look|look into (?:it|that))|(?:I.m |I am )?(?:working on (?:it|that)|on it))"
+            if not clause or re.fullmatch(preamble + r"[.!:]?", clause, re.I):
+                continue
+            clause = re.sub(r"^(?:I(?:’|')m (?:currently )?|I am (?:currently )?)(?=\w+ing\b)", "", clause, flags=re.I)
+            return short_text(clause[:1].upper() + clause[1:], 96)
+    return ""
 
 
 def command_activity(item):
@@ -122,6 +142,10 @@ def command_activity(item):
     if status not in ("inProgress", "completed", "failed", "declined"):
         return ""
     active = status == "inProgress"
+    if status == "declined":
+        return "Command declined"
+    if status == "failed" or (status == "completed" and item.get("exitCode") not in (None, 0)):
+        return "Command failed"
     actions = item.get("commandActions") or []
     for action in actions:
         name = Path(action.get("path") or action.get("name") or "").name
@@ -155,7 +179,7 @@ def activity(item):
         moderation = item.get("moderation") or {}
         if moderation.get("moderated") or (moderation.get("display") or {}).get("mode") in ("block", "hide"):
             return ""
-        return short_text(item.get("text"))
+        return message_gist(item.get("text"))
     if kind == "commandExecution":
         return command_activity(item)
     if kind == "fileChange":
@@ -165,7 +189,7 @@ def activity(item):
             verb = {"inProgress": "Editing ", "completed": "Updated ", "failed": "Couldn’t update ", "declined": "Skipped edits to "}.get(item.get("status"))
             return verb + target if verb else ""
     if kind == "plan":
-        return short_text(item.get("text"))
+        return message_gist(item.get("text"))
     if kind == "webSearch":
         return "Checking sources for " + (short_text(item.get("query"), 72) or "the current task")
     return ""
@@ -184,13 +208,16 @@ def recent_progress(server, key, cache):
     except RuntimeError:
         # Older and ephemeral sessions may only provide thread-level status.
         return (turn["status"], cache.get(turn["id"], "")) if turn else (None, "")
-    for entry in page["data"]:
-        if entry.get("turnId") == turn["id"]:
-            line = activity(entry.get("item") or {})
-            if line:
-                cache.clear()
-                cache[turn["id"]] = line
-                return turn["status"], line
+    items = [entry.get("item") or {} for entry in page["data"] if entry.get("turnId") == turn["id"]]
+    if turn["status"] == "completed":
+        # The final response is authoritative even if a tool finishes after it.
+        items.sort(key=lambda item: item.get("type") == "agentMessage" and item.get("phase") == "final_answer", reverse=True)
+    for item in items:
+        line = activity(item)
+        if line:
+            cache.clear()
+            cache[turn["id"]] = line
+            return turn["status"], line
     return turn["status"], cache.get(turn["id"], "")
 
 
@@ -215,18 +242,19 @@ def read_snapshot(server, key, link=None, cache=None):
         elif last == "interrupted":
             sentence = "Turn interrupted — " + (line or title)
         elif last == "completed":
-            sentence = line or ("Finished the last turn in “" + title + "”")
+            sentence = line or ("Finished · " + title)
     if sentence[-1:] not in ".!?…":
         sentence += "."
     result = {"provider": "Codex", "sessionID": key, "title": title,
               "state": state, "sentence": sentence}
+    result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort")}
     if link:
         result["sessionURL"] = link
     return result
 
 
 def library_page(server, cursor=None):
-    params = {"limit": 60}
+    params = {"limit": 60, "currentAccountOnly": True}
     if cursor:
         params["cursor"] = cursor
     page = server.call("thread/list", params)

@@ -87,6 +87,7 @@ class CompanionTests(unittest.TestCase):
         class Pages:
             def call(self, method, params):
                 self_test.assertEqual(method, "thread/list")
+                self_test.assertIs(params["currentAccountOnly"], True)
                 key = B if params.get("cursor") else A
                 return {"data": [{"id": key, "name": "Same title"}], "nextCursor": "next"}
         self_test = self
