@@ -12,12 +12,11 @@
   <title>watchnotch — All your AI sessions, one clear view</title>
   <link rel="icon" type="image/png" href="media/owl-small.png">
   <link rel="stylesheet" href="style.css">
-  <script src="tour.js" defer></script>
 </head>
 <body>
 <header>
   <a class="brand" href="./" aria-label="watchnotch home"><img src="media/owl-small.png" alt="" width="46" height="46">watchnotch</a>
-  <nav aria-label="Main navigation"><a href="#everyone">For everyone</a><a href="#tour">Demo</a><a href="#try">Mac &amp; Windows</a><a href="https://github.com/erezlev13/watchnotch">GitHub ↗</a></nav>
+  <nav aria-label="Main navigation"><a class="nav-secondary" href="#everyone">For everyone</a><a href="#tour">Demo</a><a href="#try">Get the app</a><a class="nav-secondary" href="https://github.com/erezlev13/watchnotch">GitHub <span aria-hidden="true">↗</span></a></nav>
 </header>
 <main>
   <section class="hero">
@@ -45,29 +44,14 @@
   </section>
 
   <section id="tour" aria-labelledby="tour-title">
-    <div class="section-heading"><h2 id="tour-title">Watch WatchNotch in action.</h2><span>Mac feature walkthrough · 1 min 4 sec</span></div>
-    <figure>
-      <video id="film" aria-label="Watchnotch Mac feature walkthrough" aria-describedby="film-caption film-help" width="1920" height="1080" controls playsinline preload="metadata" poster="media/feature-tour.jpg">
-        <source src="media/feature-tour.mp4" type="video/mp4">
-        <track kind="captions" src="media/feature-tour.vtt" srclang="en" label="English descriptions">
-        <a href="media/feature-tour.mp4">Open the feature film</a>
-      </video>
-      <figcaption id="film-caption">This walkthrough shows the Mac experience, not Windows. It combines features from preview 0.1.7, the public source build and local development builds. Some features shown are not in the download.</figcaption>
-      <p id="film-help" class="film-help">Having trouble playing the video? <a href="media/feature-tour.mp4" download>Download the MP4</a> or <a href="media/sessions.gif">see the lightweight animated session preview</a>.</p>
-      <div id="film-error" class="film-error" role="status" hidden><strong>This video could not play in your browser.</strong><p>Try the <a href="media/feature-tour.mp4" download>MP4 download</a> or view the <a href="media/sessions.gif">animated preview</a> instead.</p><img src="media/sessions.gif" width="900" height="480" loading="lazy" alt="Animated preview of WatchNotch session tiles"></div>
+    <div class="section-heading"><h2 id="tour-title">Watch WatchNotch in action.</h2><span>Animated Mac preview</span></div>
+    <figure class="demo-preview">
+      <picture>
+        <source media="(prefers-reduced-motion: reduce)" srcset="media/sessions.png">
+        <img src="media/sessions.gif" width="900" height="480" loading="lazy" decoding="async" alt="Animated preview of independent WatchNotch AI session cards showing their status at a glance.">
+      </picture>
+      <figcaption>Illustrative preview · Features vary by build.</figcaption>
     </figure>
-    <nav class="chapters" aria-label="Film chapters">
-      <a href="media/feature-tour.mp4#t=0"><time datetime="PT0S">0:00</time>Pin a session</a>
-      <a href="media/feature-tour.mp4#t=6"><time datetime="PT6S">0:06</time>Live updates</a>
-      <a href="media/feature-tour.mp4#t=12"><time datetime="PT12S">0:12</time>Questions</a>
-      <a href="media/feature-tour.mp4#t=18"><time datetime="PT18S">0:18</time>Approvals</a>
-      <a href="media/feature-tour.mp4#t=24"><time datetime="PT24S">0:24</time>Desktop replies</a>
-      <a href="media/feature-tour.mp4#t=30"><time datetime="PT30S">0:30</time>Previews &amp; queues</a>
-      <a href="media/feature-tour.mp4#t=36"><time datetime="PT36S">0:36</time>Screenshots</a>
-      <a href="media/feature-tour.mp4#t=44"><time datetime="PT44S">0:44</time>Claude</a>
-      <a href="media/feature-tour.mp4#t=51"><time datetime="PT51S">0:51</time>Session controls</a>
-      <a href="media/feature-tour.mp4#t=58"><time datetime="PT58S">0:58</time>Automatic display</a>
-    </nav>
   </section>
 
   <section class="library-tour" aria-labelledby="library-title">
