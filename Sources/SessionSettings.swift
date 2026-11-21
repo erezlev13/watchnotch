@@ -12,6 +12,8 @@ private struct LibraryPage: Decodable {
 
 @MainActor
 final class SessionLibrary: ObservableObject {
+    private var readingDesktop = false
+    @Published private(set) var desktopRunning = false
     @Published private(set) var desktopChats: [LibraryItem] = []
     @Published private(set) var local: [LibraryItem] = []
     @Published private(set) var activity: [Identity: SessionState] = [:]
@@ -40,17 +42,22 @@ final class SessionLibrary: ObservableObject {
     }
 
     func refreshChats(store: Store) async {
+        guard !readingDesktop else { return }
+        readingDesktop = true
+        defer { readingDesktop = false }
         let launch = NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").compactMap(\.launchDate).max()
         let args = ["--desktop"] + (launch.map { ["--launched", String($0.timeIntervalSince1970)] } ?? [])
         do {
             let page = try await Self.read("library",arguments: args)
             try Task.checkCancellation()
+            desktopRunning = launch != nil
             desktopChats = page.items
-            store.updateChatActivity(page.items)
+            store.updateChatActivity(desktopChats, desktopRunning: desktopRunning)
         } catch is CancellationError {
         } catch {
-            desktopChats = desktopChats.map { var row = $0; row.state = nil; return row }
-            store.updateChatActivity([])
+            desktopRunning = false
+            desktopChats = desktopChats.map { var row = $0; row.state = nil; row.activityText = nil; return row }
+            store.updateChatActivity([], desktopRunning: false)
             message = "Couldn’t read the ChatGPT desktop catalog. Use Find on this Mac or import an export."
         }
     }
@@ -146,10 +153,7 @@ struct SessionSettings: View {
         func item(_ card: Card) -> LibraryItem {
             LibraryItem(provider: card.value.provider, sessionID: card.value.sessionID, title: card.value.title, updated: card.value.updatedAt.timeIntervalSince1970, state: card.value.state)
         }
-        let chatStates = Dictionary(uniqueKeysWithValues: library.desktopChats.compactMap { row in row.state.map { (row.id, $0) } })
-        func liveState(_ row: LibraryItem) -> SessionState? {
-            row.provider == "Codex" ? library.activity[row.id] : chatStates[row.id]
-        }
+        let desktop = Dictionary(uniqueKeysWithValues: library.desktopChats.map { ($0.id, $0) })
         var items: [LibraryItem]
         switch section {
         case "Pinned": items = store.pinned.map(item)
@@ -163,8 +167,14 @@ struct SessionSettings: View {
         }
         if section != "Demo" {
             items = items.map { item in
+                guard identity(item).origin != .fixture else { return item }
+                if var chat = desktop[item.id] {
+                    chat.desktopChat = true
+                    return chat
+                }
                 var row = item
-                if identity(row).origin != .fixture { row.state = liveState(row) }
+                row.desktopChat = nil
+                row.state = library.activity[item.id]
                 return row
             }
         }
@@ -193,6 +203,13 @@ struct SessionSettings: View {
             return fixture.id
         }
         return row.id
+    }
+
+    private func sourceLabel(_ row: LibraryItem, origin: Origin) -> String {
+        if origin == .fixture { return row.provider + " · Demo" }
+        if row.provider == "Codex" { return "Codex · Local session" }
+        if row.work == true { return "ChatGPT Work" }
+        return row.desktopChat == true ? "ChatGPT Chat" : "ChatGPT · Conversation link"
     }
 
     var body: some View {
@@ -256,7 +273,7 @@ struct SessionSettings: View {
                                 .frame(width: 32, height: 32).background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.title).font(.callout.weight(.medium)).lineLimit(1).help(row.title)
-                                Text(key.origin == .fixture ? "\(row.provider) · Demo" : (row.provider == "Codex" ? "Codex · Local session" : (row.work == true ? "ChatGPT Work" : "ChatGPT · Conversation link"))).font(.caption2).foregroundStyle(.secondary)
+                                Text(sourceLabel(row, origin: key.origin)).font(.caption2).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if let status = row.state, status != .unavailable {
@@ -265,6 +282,8 @@ struct SessionSettings: View {
                                 Label(label, systemImage: status == .running ? "waveform" : (status == .needsInput ? "hand.raised.fill" : "pause.circle"))
                                     .font(.caption2.weight(.semibold)).foregroundStyle(color)
                                     .padding(.horizontal, 6).padding(.vertical, 3).background(color.opacity(0.10), in: Capsule())
+                            } else if row.desktopChat == true && library.desktopRunning {
+                                Text("No activity reported").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                             }
                             Button {
                                 if pinned { store.unpin(key) }

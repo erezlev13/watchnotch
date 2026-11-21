@@ -175,21 +175,56 @@ let workID = Identity(origin: .adapter, provider: "ChatGPT", sessionID: workKey)
 check(workStore.addChat("https://chatgpt.com/c/" + workKey, title: "Saved chat"), "failed to pin Work chat")
 var workRow = LibraryItem(provider: "ChatGPT", sessionID: workKey, title: "Work test", updated: 123,
                           state: .running, work: true, activityText: "Writing a response")
-workStore.updateChatActivity([workRow])
+workStore.updateChatActivity([workRow], desktopRunning: true)
 let writing = workStore.cards[workID]!.value
 check(writing.state == .running && writing.sentence == "Writing a response" && writing.desktopChat == true,
       "pinned Work chat did not display its live desktop state")
-workStore.updateChatActivity([workRow])
+workStore.updateChatActivity([workRow], desktopRunning: true)
 check(workStore.cards[workID]?.value.updatedAt == writing.updatedAt, "quiet Work chat changed its activity timestamp")
 workRow.state = nil
 workRow.activityText = nil
-workStore.updateChatActivity([workRow])
+workStore.updateChatActivity([workRow], desktopRunning: true)
 check(workStore.cards[workID]?.value.sentence == "ChatGPT stopped reporting activity", "cleared signal falsely implied success")
 workRow.state = .ready
 workRow.activityText = "A new response is ready"
-workStore.updateChatActivity([workRow])
+workStore.updateChatActivity([workRow], desktopRunning: true)
 check(workStore.cards[workID]?.value.state == .ready, "unread finished response missed")
-workStore.updateChatActivity([])
+workStore.updateChatActivity([], desktopRunning: true)
 check(workStore.cards[workID]?.value.desktopChat != true && workStore.cards[workID]?.value.state == .unavailable,
       "missing catalog kept reporting a previous live turn")
 print("PASS  Pinned Work activity, stable timestamps and cleared desktop signals")
+
+let chatKey = UUID().uuidString.lowercased()
+let chatID = Identity(origin: .adapter, provider: "ChatGPT", sessionID: chatKey)
+check(workStore.addChat("https://chatgpt.com/c/" + chatKey, title: "Saved chat"), "failed to pin ordinary Chat")
+let chatRow = LibraryItem(provider: "ChatGPT", sessionID: chatKey, title: "Work test", updated: 100)
+func checkChatPair(_ chat: LibraryItem, _ work: LibraryItem, running: Bool) {
+    workStore.updateChatActivity([chat, work], desktopRunning: running)
+    for key in [chatID, workID] {
+        check(workStore.cards[key]?.connected == running, "connection did not follow desktop for both pins")
+        check(workStore.cards[key]?.value.nativeChatTitle == nil, "duplicate titles could misroute a session")
+    }
+}
+workRow.state = .running
+workRow.activityText = "Writing a response"
+checkChatPair(chatRow, workRow, running: true)
+check(workStore.cards[chatID]?.quietChat == true && workStore.cards[chatID]?.value.state == .ready, "quiet chat was disconnected")
+check(workStore.cards[chatID]?.value.sentence == "No active turn reported", "quiet chat claimed a turn")
+check(workStore.cards[workID]?.value.state == .running, "ordinary Chat affected Work")
+let newer = LibraryItem(provider: "ChatGPT", sessionID: chatKey, title: chatRow.title, updated: 150)
+checkChatPair(newer, workRow, running: true)
+let changed = workStore.cards[chatID]!
+check(changed.value.sentence == "Conversation updated in ChatGPT", "missed update between polls")
+check(workStore.watchedSession == chatID, "owl missed ordinary Chat update")
+checkChatPair(newer, workRow, running: true)
+check(workStore.cards[chatID] == changed, "quiet poll changed chat")
+checkChatPair(newer, workRow, running: false)
+check(workStore.cards[workID]?.value.state == .unavailable && workStore.watchedSession == nil,
+      "cached Work status survived desktop disconnect")
+let resumed = Store(root: workRoot, directory: workRoot.appendingPathComponent("Sessions"), ticking: false)
+check(resumed.pinned.map(\.id) == [workID, chatID] && resumed.watchedSession == nil, "restart lost pins or replayed cached activity")
+resumed.updateChatActivity([newer, workRow], desktopRunning: true)
+check(resumed.cards[chatID]?.connected == true && resumed.cards[workID]?.value.state == .running, "failed to reconnect pins")
+resumed.updateChatActivity([workRow], desktopRunning: true)
+check(resumed.cards[chatID]?.connected == false, "missing chat kept its connection")
+print("PASS  Chat and Work pins monitor independently across quiet polls, source changes, disconnect and restart")

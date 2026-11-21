@@ -7,7 +7,7 @@ extension Card {
     var label: String {
         if origin == .fixture { return "Demo" }
         if value.provider == "ChatGPT" && value.state == .unavailable && value.sessionURL != nil {
-            return value.desktopChat == true ? "No signal" : "Saved link"
+            return value.desktopChat == true ? "Offline" : "Saved link"
         }
         return value.state == .unavailable ? "Offline" : "Connected"
     }
@@ -15,7 +15,7 @@ extension Card {
         switch value.state {
         case .running: return "Working"
         case .needsInput: return "Needs input"
-        case .ready: return "Ready"
+        case .ready: return quietChat ? "Watching" : "Ready"
         case .unavailable: return label
         }
     }
@@ -182,7 +182,7 @@ private struct SessionTile: View {
                 Image(systemName: card.value.provider == "Codex" ? "terminal" : "bubble.left")
                 Text(card.value.provider).fontWeight(.semibold)
                 if card.origin == .fixture { Text("· Demo").foregroundStyle(.white.opacity(0.65)) }
-                else if card.value.state != .unavailable { Text("· Live").foregroundStyle(accent) }
+                else if card.connected { Text("· Live").foregroundStyle(accent) }
                 Spacer(minLength: 2)
                 Button { showingDetails.toggle() } label: {
                     Image(systemName: "info.circle").frame(width: 22, height: 22)
