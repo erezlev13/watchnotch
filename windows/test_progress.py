@@ -1,4 +1,5 @@
 import unittest
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -160,7 +161,7 @@ class BranchTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            with sqlite3.connect(root / "state_5.sqlite") as db:
+            with closing(sqlite3.connect(root / "state_5.sqlite")) as db, db:
                 db.execute("CREATE TABLE thread_spawn_edges(parent_thread_id, child_thread_id)")
                 # A stale edge to an unrelated worker must be rejected by its authoritative thread/read.
                 db.executemany("INSERT INTO thread_spawn_edges VALUES(?, ?)",
