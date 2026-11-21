@@ -12,6 +12,10 @@ The adapter uses Python 3.9 or later and the running local Codex App Server. Che
 
 The monitor writes a snapshot in `~/Library/Application Support/Mac Notch Session Companion/Sessions`. Set `NOTCH_SESSION_DIR` to select another directory. Each thread has a distinct file and a single writer. Quiet polls leave the file untouched. On a disconnect after discovery, its last sentence stays visible and its state becomes unavailable. The monitor retries the connection while it runs. Control-C or SIGTERM closes the monitor and marks the card unavailable.
 
+The reply field at the bottom of each tile sends text to the selected thread using the local App Server. The adapter checks the thread identity and state first, then calls `turn/start`. A returned turn ID confirms acceptance. If delivery is uncertain, the draft stays on the tile for inspection in the original session.
+
+The library uses account-scoped thread metadata to identify subagents and forks. A thread’s `parentThreadId` or `forkedFromId` connects it to its parent tile. Select the compact branch tile to open that specific Codex thread.
+
 ## What was verified
 
 On November 21, 2026, the installed standalone CLI and running App Server both reported **0.171.0**. The local desktop bundle was **ChatGPT.app 26.1117.41037** (bundle identifier `com.openai.codex`, bundled CLI **0.171.0-alpha.13**).
@@ -19,6 +23,7 @@ On November 21, 2026, the installed standalone CLI and running App Server both r
 | Surface | Verification |
 | --- | --- |
 | Two independent clients of the installed local daemon | One client started an ephemeral thread in a temporary folder. A second client observed the same stable ID change from ready to running and back to ready while the first ran a five-second sleep. |
+| Replies | Two independent disposable threads received their own test messages through the local adapter. |
 | Quiet cards, disconnect, restart | The test compared snapshot bytes across quiet polls, terminated the monitor and verified unavailable state with the previous sentence, then restarted it and verified the same ID came back ready. |
 | Native desktop origin | The desktop automation tool refused access to `com.openai.codex`. No synthetic desktop-created thread was observed end to end. An ID owned by a different runtime can be missing or report `notLoaded`. |
 | Approval | App Server reports waiting-on-approval and waiting-on-user-input flags. The adapter displays a source-session status when either flag appears. It exposes no in-notch decision buttons for Codex. A flag does not carry a request ID or command. |

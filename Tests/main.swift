@@ -80,7 +80,7 @@ let nativeURL = URL(string: "codex://threads/" + key)!
 let cloudURL = URL(string: "https://chatgpt.com/codex/tasks/task_example")!
 var source = Snapshot(provider: "ChatGPT",sessionID: key,title: "Same title",sentence: "Ready.",state: .ready,updatedAt: Date(),sessionURL: privateURL)
 let chatJump = SessionJump(card: Card(value: source,origin: .adapter))!
-check(chatJump.steps(providerRunning: true) == [.matchingWindow(privateURL),.universalLink(privateURL),.browser(privateURL)],"ChatGPT must prefer its own open window and keep the identical URL on fallback")
+check(chatJump.steps(providerRunning: true) == [.chatWindow(privateURL),.universalLink(privateURL)],"ChatGPT must prefer its own open window and keep the identical URL on fallback")
 check(chatJump.steps(providerRunning: false) == [.browser(privateURL)],"closed ChatGPT should use the browser")
 check(SessionJump(card: Card(value: source,origin: .fixture)) == nil,"fixture exposed real navigation")
 source.sessionURL = URL(string: "https://chatgpt.com/c/" + UUID().uuidString)!
@@ -93,6 +93,8 @@ local.state = .unavailable
 check(SessionJump(card: Card(value: local,origin: .adapter),pairedWebLink: cloudURL)!.steps(providerRunning: true) == [.matchingWindow(cloudURL),.browser(cloudURL)],"offline local runtime should fall back")
 check(SessionJump(card: Card(value: local,origin: .adapter))!.steps(providerRunning: false) == [.desktop(nativeURL)],"local-only UUID must open its own native thread")
 check(SessionJump.webLink("https://unrelated.example/codex/tasks/task_123") == nil,"unexpected web destination")
+check(SessionJump.nativeChatURL("app://-/c/" + key) == privateURL, "desktop Work route did not match the conversation")
+check(SessionJump.nativeChatURL("https://unrelated.example/c/" + key) == nil, "unrelated URL was accepted")
 print("PASS  Exact-session desktop routing, browser fallback, offline, local-only, and fixture handling")
 
 let owlRoot = root.appendingPathComponent("owl-test")
@@ -164,3 +166,30 @@ for screen in [CGFloat(320), 1024, 1440, 1920, 3440] {
     check(layout.tileWidth(for: layout.capacity + 3) == layout.tileWidth(for: layout.capacity), "shrunk retained pins after display change")
 }
 check(TileLayout(available: 1920).capacity > TileLayout(available: 1024).capacity, "fixed pin limit")
+
+let workRoot = root.appendingPathComponent("work-activity")
+let workStore = Store(root: workRoot, directory: workRoot.appendingPathComponent("Sessions"), ticking: false)
+workStore.pinned.forEach { workStore.unpin($0.id) }
+let workKey = UUID().uuidString.lowercased()
+let workID = Identity(origin: .adapter, provider: "ChatGPT", sessionID: workKey)
+check(workStore.addChat("https://chatgpt.com/c/" + workKey, title: "Saved chat"), "failed to pin Work chat")
+var workRow = LibraryItem(provider: "ChatGPT", sessionID: workKey, title: "Work test", updated: 123,
+                          state: .running, work: true, activityText: "Writing a response")
+workStore.updateChatActivity([workRow])
+let writing = workStore.cards[workID]!.value
+check(writing.state == .running && writing.sentence == "Writing a response" && writing.desktopChat == true,
+      "pinned Work chat did not display its live desktop state")
+workStore.updateChatActivity([workRow])
+check(workStore.cards[workID]?.value.updatedAt == writing.updatedAt, "quiet Work chat changed its activity timestamp")
+workRow.state = nil
+workRow.activityText = nil
+workStore.updateChatActivity([workRow])
+check(workStore.cards[workID]?.value.sentence == "ChatGPT stopped reporting activity", "cleared signal falsely implied success")
+workRow.state = .ready
+workRow.activityText = "A new response is ready"
+workStore.updateChatActivity([workRow])
+check(workStore.cards[workID]?.value.state == .ready, "unread finished response missed")
+workStore.updateChatActivity([])
+check(workStore.cards[workID]?.value.desktopChat != true && workStore.cards[workID]?.value.state == .unavailable,
+      "missing catalog kept reporting a previous live turn")
+print("PASS  Pinned Work activity, stable timestamps and cleared desktop signals")

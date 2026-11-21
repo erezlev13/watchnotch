@@ -41,6 +41,10 @@ def default_socket():
     return config / "app-server-control/app-server-control.sock"
 
 
+class RPCRejected(RuntimeError):
+    pass
+
+
 class Server:
     """JSON-RPC over the local Codex Unix WebSocket control endpoint."""
     def __init__(self, path=None):
@@ -136,7 +140,7 @@ class Server:
             message = self.read_message()
             if message.get("id") == key and "method" not in message:
                 if "error" in message:
-                    raise RuntimeError(f"{method} failed (RPC {message['error'].get('code')}).")
+                    raise RPCRejected(f"{method} failed (RPC {message['error'].get('code')}).")
                 return message["result"]
         raise TimeoutError(f"{method} timed out.")
 
@@ -163,7 +167,7 @@ def short_text(value, limit=148):
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"https?://\S+|(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{10,}", "…", text)
     text = " ".join(text.replace("*", "").replace("`", "").split()).strip("# -")
-    if len(text) > limit:
+    if limit is not None and len(text) > limit:
         text = (text[:limit - 1].rsplit(" ", 1)[0] or text[:limit - 1]).rstrip(".,;:") + "…"
     return text
 
@@ -179,13 +183,15 @@ def message_gist(value):
         if not line or line.startswith(("#", ">")) or line.endswith(":"):
             continue
         for clause in re.split(r"(?<=[.!?])\s+", line):
-            clause = short_text(clause, 500)
+            clause = short_text(clause, None)
             clause = re.sub(r"^" + ACK + r"(?:\s*[,!:—–-]\s*|[.!?]*$)", "", clause, flags=re.I)
             preamble = r"(?:summary|result|what changed|here.s (?:the gist|what (?:I|we) found)|(?:let me|I.ll) (?:check|take a look|look into (?:it|that))|(?:I.m |I am )?(?:working on (?:it|that)|on it))"
             if not clause or re.fullmatch(preamble + r"[.!:]?", clause, re.I):
                 continue
             clause = re.sub(r"^(?:I(?:’|')m (?:currently )?|I am (?:currently )?)(?=\w+ing\b)", "", clause, flags=re.I)
-            return short_text(clause[:1].upper() + clause[1:], 96)
+            if len(clause) <= 360:
+                return clause[:1].upper() + clause[1:]
+            # Prefer a complete short sentence or a structured activity to a chopped paragraph.
     return ""
 
 
@@ -201,7 +207,9 @@ def command_activity(item):
     actions = item.get("commandActions") or []
     for action in actions:
         name = Path(action.get("path") or action.get("name") or "").name
-        name = short_text(name, 54)
+        name = short_text(name, None)
+        if len(name) > 100:
+            name = "project files"
         if action.get("type") == "read" and name:
             return ("Reading " if active else "Read ") + name
         if action.get("type") == "listFiles" and name:
@@ -235,15 +243,18 @@ def activity(item):
     if kind == "commandExecution":
         return command_activity(item)
     if kind == "fileChange":
-        names = [short_text(Path(c["path"]).name, 48) for c in item.get("changes", []) if c.get("path")]
+        names = [short_text(Path(c["path"]).name, None) for c in item.get("changes", []) if c.get("path")]
         if names:
             target = names[0] + (" and " + str(len(names) - 1) + " more" if len(names) > 1 else "")
+            if len(target) > 120:
+                target = "project files"
             verb = {"inProgress": "Editing ", "completed": "Updated ", "failed": "Couldn’t update ", "declined": "Skipped edits to "}.get(item.get("status"))
             return verb + target if verb else ""
     if kind == "plan":
         return message_gist(item.get("text"))
     if kind == "webSearch":
-        return "Checking sources for " + (short_text(item.get("query"), 72) or "the current task")
+        query = short_text(item.get("query"), None)
+        return "Checking sources for " + (query if 0 < len(query) <= 120 else "the current task")
     return ""
 
 
@@ -296,20 +307,21 @@ def read_snapshot(server, key, link=None, cache=None):
     if thread["id"] != key:
         raise RuntimeError("Codex returned a different thread identity.")
     state, sentence = status(thread)
-    title = short_text(thread.get("name"), 110) or "Codex session"
+    title = short_text(thread.get("name"), None) or "Codex session"
+    subject = title if len(title) <= 130 else "this session"
     last, line = recent_progress(server, key, cache if cache is not None else {})
     if state == "needsInput":
         reason = "Approval needed" if "waitingOnApproval" in thread["status"].get("activeFlags", []) else "Your input is needed"
-        sentence = reason + " — " + (line or title)
+        sentence = reason + " — " + (line or subject)
     elif state == "running":
-        sentence = line if last == "inProgress" and line else "Working on “" + title + "”"
+        sentence = line if last == "inProgress" and line else "Working on " + subject
     elif thread["status"]["type"] in ("idle", "notLoaded"):
         if last == "failed":
-            state, sentence = "unavailable", "Turn failed — " + (line or title)
+            state, sentence = "unavailable", "Turn failed — " + (line or subject)
         elif last == "interrupted":
-            sentence = "Turn interrupted — " + (line or title)
+            sentence = "Turn interrupted — " + (line or subject)
         elif last == "completed":
-            sentence = line or ("Finished · " + title)
+            sentence = line or ("Finished · " + subject)
     if sentence[-1:] not in ".!?…":
         sentence += "."
     result = {"provider": "Codex", "sessionID": key, "title": title,
@@ -377,14 +389,66 @@ def watch(key, link, socket, directory):
                 publish(path, dict(previous, state="unavailable"))
 
 
+def branch_items(server, parents):
+    """Only publish direct, provider-attributed relationships to a selected parent."""
+    found = {}
+    params = {"currentAccountOnly": True, "limit": 100,
+              "sourceKinds": ["cli", "vscode", "appServer", "exec", "subAgent", "subAgentReview",
+                              "subAgentCompact", "subAgentThreadSpawn", "subAgentOther", "unknown"]}
+    cursors = set()
+    while True:
+        page = server.call("thread/list", params)
+        for thread in page["data"]:
+            for field, kind in (("parentThreadId", "Subagent"), ("forkedFromId", "Fork")):
+                parent = thread.get(field)
+                if parent not in parents or thread["id"] == parent:
+                    continue
+                try:
+                    child = str(uuid.UUID(thread["id"]))
+                except (TypeError, ValueError):
+                    continue
+                label = thread.get("agentNickname") or thread.get("name") or thread.get("agentRole") or kind
+                found.setdefault((parent, child), {"provider": "Codex", "sessionID": child, "parentID": parent,
+                    "branchKind": kind, "title": " ".join(label.split())[:120], "updated": thread.get("updatedAt") or 0,
+                    "state": status(thread)[0] if thread.get("status") else "unavailable"})
+        cursor = page.get("nextCursor")
+        if not cursor or cursor in cursors:
+            break
+        cursors.add(cursor)
+        params["cursor"] = cursor
+    return sorted(found.values(), key=lambda r: (r["state"] in ("needsInput", "running"), r["updated"]), reverse=True)
+
+
+def send_reply(server, key, text):
+    if not text.strip() or len(text.encode("utf-8")) > 65536:
+        return "invalid"
+    thread = server.call("thread/read", {"threadId": key, "includeTurns": False})["thread"]
+    if thread.get("id") != key or status(thread)[0] not in ("ready", "running"):
+        return "openSession"
+    try:
+        result = server.call("turn/start", {"threadId": key, "input": [{"type": "text", "text": text}]})
+        return "sent" if (result.get("turn") or {}).get("id") else "uncertain"
+    except RPCRejected:
+        return "rejected"
+    except (OSError, RuntimeError, ValueError, EOFError, KeyError):
+        # Delivery may have succeeded before the connection closed. Never replay automatically.
+        return "uncertain"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--branches", nargs="+", type=thread_id, help="List direct forks and subagents for the selected parent IDs")
+    parser.add_argument("--reply", action="store_true", help="Send standard input to the specified existing thread")
     parser.add_argument("--list", action="store_true", help="List a page of thread titles and IDs")
     parser.add_argument("--loaded", action="store_true", help="List activity for loaded sessions in the current account")
     parser.add_argument("--cursor", help="Continue a thread listing")
     parser.add_argument("session", nargs="?", help="Desktop thread link or UUID")
     parser.add_argument("--socket", type=Path, help="Optional App Server control socket")
     args = parser.parse_args()
+    if args.branches:
+        with Server(args.socket) as server:
+            print(json.dumps({"items": branch_items(server, set(args.branches))}))
+        return 0
     if args.list or args.loaded:
         params = {"limit": 60, "currentAccountOnly": True}
         if args.cursor:
@@ -411,6 +475,15 @@ def main():
         key = thread_id(args.session)
     except argparse.ArgumentTypeError as error:
         parser.error(str(error))
+    if args.reply:
+        try:
+            data = sys.stdin.buffer.read(65537)
+            with Server(args.socket) as server:
+                outcome = send_reply(server, key, data.decode("utf-8"))
+        except (OSError, RuntimeError, ValueError, KeyError):
+            outcome = "openSession"
+        print(outcome)
+        return 0
     link = "codex://threads/" + key if args.session.startswith("codex://threads/") else None
     def stop(signum, frame):
         raise KeyboardInterrupt

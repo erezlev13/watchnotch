@@ -27,6 +27,8 @@ struct Snapshot: Codable, Equatable {
     var updatedAt: Date
     var sessionURL: URL?
     var resultURL: URL?
+    var nativeChatTitle: String?
+    var desktopChat: Bool?
     var details: SessionDetails?
     var request: PendingRequest?
 }
@@ -134,5 +136,9 @@ struct LibraryItem: Codable, Identifiable {
     let title: String
     let updated: Double
     var state: SessionState?
+    var work: Bool?
+    var activityText: String?
+    var parentID: String?
+    var branchKind: String?
     var id: Identity { Identity(origin: .adapter, provider: provider, sessionID: sessionID) }
 }
