@@ -1,41 +1,48 @@
 WEBVTT
 
-00:00:00.000 --> 00:00:06.000
+00:00:00.000 --> 00:00:05.000
+In the Mac development preview, a live Claude Code job shows Needs input.
+The tile directs you to review the permission request in Claude Code.
+
+00:00:05.000 --> 00:00:10.000
+The saved job now shows Offline. Its last report said it needed input.
+
+00:00:10.000 --> 00:00:16.000
 In Mac preview 0.1.7, pin a conversation in the session library.
 The expanded notch shows the pinned tiles side by side.
 
-00:00:06.000 --> 00:00:12.000
+00:00:16.000 --> 00:00:22.000
 A working Codex subagent appears under Portfolio site.
 The tile updates when the mobile layout checks pass.
 
-00:00:12.000 --> 00:00:18.000
+00:00:22.000 --> 00:00:28.000
 In the Mac source build, choose Two-column grid.
 The tile shows that Codex is applying the selected layout.
 
-00:00:18.000 --> 00:00:24.000
+00:00:28.000 --> 00:00:34.000
 The tile asks permission to save the gallery preview.
 Approve once allows the save. Deny skips it.
 
-00:00:24.000 --> 00:00:30.000
+00:00:34.000 --> 00:00:40.000
 A follow-up is typed into Portfolio copy.
 The arrow sends it through the open ChatGPT desktop composer.
 
-00:00:30.000 --> 00:00:36.000
+00:00:40.000 --> 00:00:46.000
 In development, a pinned ChatGPT tile shows the last observed reply.
 A follow-up during an active turn can show Queued in ChatGPT.
 
-00:00:36.000 --> 00:00:44.000
+00:00:46.000 --> 00:00:54.000
 Paste a screenshot and add a caption in the Codex tile.
 The image and caption can be sent to the same thread.
 
-00:00:44.000 --> 00:00:51.000
+00:00:54.000 --> 00:01:01.000
 In development, pin a Claude Desktop chat or a local Claude Code session.
 Hand off a chat draft or copy an attach command for the project terminal.
 
-00:00:51.000 --> 00:00:58.000
+00:01:01.000 --> 00:01:08.000
 End session offers to archive a Codex thread.
 Stop response stops an active ChatGPT turn and keeps the conversation.
 
-00:00:58.000 --> 00:01:04.000
+00:01:08.000 --> 00:01:14.000
 Enable Automatically show active sessions in the session library.
 Working or waiting sessions appear alongside pins and leave when idle.
