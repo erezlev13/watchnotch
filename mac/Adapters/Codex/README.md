@@ -2,7 +2,7 @@
 
 Connect a chosen thread by pasting its UUID or an original `codex://threads/UUID` link into the companion's Codex connection field. The monitor asks the local daemon for that thread's metadata every 2.5 seconds. The title comes from the thread name when available. The companion builds a **Jump in** desktop link from the thread UUID and accepts an optional corresponding web address in Manage sessions.
 
-From the repository root, the same monitor can run on its own.
+From the `mac/` directory, the same monitor can run on its own.
 
 ```sh
 /usr/bin/python3 Adapters/Codex/monitor.py 'codex://threads/YOUR-THREAD-UUID'
@@ -24,7 +24,7 @@ On November 21, 2026, the installed standalone CLI and running App Server both r
 | Approval | App Server reports waiting-on-approval and waiting-on-user-input flags. The adapter displays a source-session status when either flag appears. It exposes no in-notch decision buttons for Codex. A flag does not carry a request ID or command. |
 | Open session and results | The installed desktop bundle registers the Codex URL scheme. A user-supplied original link is retained verbatim in canonical UUID form. Native navigation to a synthetic desktop thread and direct result opening remain unverified. |
 
-Repeat the local test from the repository root while the daemon is running.
+Repeat the local test from the `mac/` directory while the daemon is running.
 
 ```sh
 /usr/bin/python3 -B Adapters/Codex/verify.py

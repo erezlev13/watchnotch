@@ -6,7 +6,7 @@ The session library reads titles, IDs and dates from the local ChatGPT desktop c
 
 ## Add a conversation
 
-Copy the address of a conversation you own from ChatGPT's web address bar. Use a direct URL of the form `https://chatgpt.com/c/<UUID>`. A title is stored locally. From the project root, run the following command with that address and your chosen title.
+Copy the address of a conversation you own from ChatGPT's web address bar. Use a direct URL of the form `https://chatgpt.com/c/<UUID>`. A title is stored locally. From the `mac/` directory, run the following command with that address and your chosen title.
 
 ```sh
 python3 Adapters/ChatGPT/register.py 'https://chatgpt.com/c/<UUID>' --title 'Market research'
