@@ -383,11 +383,13 @@ private struct TypedStatus: View {
     let panel: PanelState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var script = StatusScript()
+    @State private var sampleTime: TimeInterval = 0
 
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     var body: some View {
         let displayed = script.current ?? sentence
+        let progress = script.progress(at: sampleTime)
         Text(displayed)
             .font(.system(size: 13, weight: .medium, design: .monospaced))
             .foregroundStyle(.white)
@@ -399,20 +401,16 @@ private struct TypedStatus: View {
                 if script.current == nil && !reduceMotion && panel.shownSentences[id] != sentence {
                     Color.clear
                 } else if script.phase == .revealing && !reduceMotion {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { _ in
-                        GeometryReader { bounds in
-                            // A soft edge travels down the final laid-out paragraph,
-                            // revealing each wrapped line in place without moving the controls.
-                            let height = max(1, bounds.size.height)
-                            let feather = min(14, height)
-                            let edge = script.progress(at: now) * (height + feather)
-                            LinearGradient(stops: [
-                                .init(color: .white, location: 0),
-                                .init(color: .white, location: max(0, (edge - feather) / height)),
-                                .init(color: .clear, location: min(1, edge / height)),
-                                .init(color: .clear, location: 1)
-                            ], startPoint: .top, endPoint: .bottom)
-                        }
+                    GeometryReader { bounds in
+                        let height = max(1, bounds.size.height)
+                        let feather = min(14, height)
+                        let edge = progress * (height + feather)
+                        LinearGradient(stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .white, location: max(0, (edge - feather) / height)),
+                            .init(color: .clear, location: min(1, edge / height)),
+                            .init(color: .clear, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
                     }
                 } else {
                     Color.white
@@ -440,9 +438,12 @@ private struct TypedStatus: View {
             .task(id: script.deadline) {
                 guard let deadline = script.deadline else { return }
                 while now < deadline {
-                    let delay = max(0, deadline - now)
+                    let remaining = max(0, deadline - now)
+                    let revealing = script.phase == .revealing
+                    let delay = revealing ? min(1.0 / 30, remaining) : remaining
                     do { try await Task.sleep(nanoseconds: UInt64(ceil(delay * 1_000_000_000))) }
                     catch { return }
+                    if revealing && !Task.isCancelled { sampleTime = now }
                 }
                 guard !Task.isCancelled, script.deadline == deadline else { return }
                 script.advance(at: now, animate: !reduceMotion)
