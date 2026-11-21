@@ -4,7 +4,7 @@ Pin a conversation from the session library or paste a private ChatGPT conversat
 
 When a pinned Chat or Work conversation is open in a ChatGPT desktop window, watchnotch checks its native question and approval cards. Grant watchnotch Accessibility access in System Settings → Privacy & Security → Accessibility. A single-choice card shows the current question and the offered answers. Selecting one advances that question in ChatGPT. An approval card shows the requested action and the app’s **Allow once** and **Deny** choices. Buttons expire if the underlying request changes. Unopened chats supply catalog status only. Multi-select forms and free-text questions can be completed in ChatGPT.
 
-Type a follow-up below **Jump in**. **Copy & open** places that tile’s draft on the clipboard and opens the conversation for you to paste and send. **Jump in** tries to select the chat in the running desktop app. The globe button opens its private URL in your browser.
+Type a follow-up below **Jump in**. Press Return or click the send arrow to submit your draft through the desktop composer. Grant watchnotch access in **System Settings → Privacy & Security → Accessibility**. Watchnotch matches the conversation ID and checks the composer before it enters any text. If the conversation is absent from desktop navigation, open it in ChatGPT first. A different existing draft stays in place. Control-click the arrow for **Copy & open**. **Jump in** tries to select the chat in the running desktop app. The globe button opens its private URL in your browser.
 
 **Find on this Mac** looks for visited conversation links in readable Safari, Chrome, Edge, Brave, Arc, Dia, Chromium, Firefox and desktop browser histories on request. You can also import a ChatGPT export ZIP or conversations JSON file. The picker retains titles, IDs and dates. Live status becomes available when the matching conversation appears in the desktop activity source. [Export instructions](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data)
 
@@ -35,4 +35,4 @@ python3 -B -m unittest -v
 swift -module-cache-path /private/tmp/notch-chatgpt-swift-cache AXProbe.swift
 ```
 
-The tests exercise desktop metadata, browser and export imports, link validation, deduplication and private file permissions. The optional Accessibility probe reports the permission state and available window metadata.
+The tests exercise desktop metadata, browser and export imports, link validation, deduplication and private file permissions. The optional Accessibility probe reports the permission state and available window metadata. To check an open conversation with the packaged app, run its `Contents/MacOS/SessionCompanion --check-desktop-composer 'https://chatgpt.com/c/<UUID>'` command. It reports whether watchnotch can identify the conversation and its writable composer. This check leaves the message field untouched.

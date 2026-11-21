@@ -26,7 +26,7 @@ The app starts with three labeled demo cards. Open the sliders or choose **Sessi
 | Source | How to connect | What the card can do |
 | --- | --- | --- |
 | Codex | Pin a local thread from the library, or use **Add link** with its UUID or desktop link. | Shows a summary from visible agent messages and recognized activity. The ⓘ button shows the configured model, reasoning effort and recorded session tokens when available. Use the reply arrow to send to the selected thread. |
-| ChatGPT and ChatGPT Work | Pin a conversation from the desktop catalog, browser history or an export, or paste its private conversation link. | Shows status supplied by the desktop app. **Copy & open** places your draft on the clipboard and opens the conversation for you to paste and send. A conversation known only by its link can still open in the browser. |
+| ChatGPT and ChatGPT Work | Pin a conversation from the desktop catalog, browser history or an export, or paste its private conversation link. | Shows status supplied by the desktop app. Use the reply arrow to submit through the ChatGPT desktop composer with macOS Accessibility permission. A conversation known only by its link can still open in the browser. |
 | Demo | Pin a sample from the picker. **Replay demo events** resets the timeline. | Simulates a question with two answer choices, independent approvals and replies. Approve once writes the selected session’s sample file. Deny skips it. Decisions expire after two minutes. |
 
 ## Answer a question or approval
@@ -37,7 +37,7 @@ For ChatGPT Chat and Work, open the pinned conversation in the Mac app and enabl
 
 ## Reply from the notch
 
-Expand the pinned row and type in **Reply to this session** below **Jump in**. Drafts stay with their own tile when you switch tiles or collapse the row. Press Return or click the arrow to send to a connected Codex thread. If the thread is offline or awaiting input, use **Copy & open** to continue in the original session. ChatGPT uses **Copy & open** for every draft.
+Expand the pinned row and type in **Reply to this session** below **Jump in**. Drafts stay with their own tile when you switch tiles or collapse the row. Press Return or click the arrow to send to a connected Codex thread or desktop ChatGPT conversation. If the thread is offline or awaiting input, use **Copy & open** to continue in the original session. For desktop Chat and Work, allow watchnotch in **System Settings → Privacy & Security → Accessibility**. Watchnotch checks the open conversation ID before entering the draft. Control-click the send arrow for **Copy & open**.
 
 The Codex monitor polls its local App Server about every 2.5 seconds. ChatGPT activity refreshes about every three seconds while a conversation is pinned or the library is open. A quiet desktop conversation shows **Watching**. If ChatGPT closes, its indexed pins go offline and reconnect when it reopens. The desktop app may report an active Work turn before supplying its title. watchnotch displays that conversation by ID until the title arrives. Account exports and browser imports supply conversation links. Live updates depend on a matching desktop activity signal.
 
