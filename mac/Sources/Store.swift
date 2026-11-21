@@ -9,6 +9,7 @@ final class Store: ObservableObject {
     @Published var pinLimit: Int
     @Published private(set) var importedChats: [LibraryItem] = []
     private var uniqueChatTitles = Set<String>()
+    private var chatDesktopRunning = false
     private var chatActivity: [String: LibraryItem] = [:]
     private let root: URL
     let directory: URL
@@ -70,7 +71,7 @@ final class Store: ObservableObject {
     var pinned: [Card] { saved.pins.compactMap { cards[$0] } }
     var watchedSession: Identity? {
         // A replayed demo must never take attention away from a connected session.
-        let eligible = pinned.filter { $0.value.state != .unavailable }
+        let eligible = pinned.filter(\.connected)
         let connected = eligible.filter { $0.origin == .adapter && $0.source != nil }
         let candidates = connected.isEmpty ? eligible.filter { $0.origin == .fixture } : connected
         return candidates.reduce(nil as Card?) { latest, card in
@@ -270,22 +271,23 @@ final class Store: ObservableObject {
         return errno == EWOULDBLOCK
     }
 
-    func updateChatActivity(_ rows: [LibraryItem]) {
+    func updateChatActivity(_ rows: [LibraryItem], desktopRunning: Bool) {
         let pinnedChats = Set(saved.pins.filter { $0.provider == "ChatGPT" && $0.origin == .adapter }.map(\.sessionID))
         uniqueChatTitles = Set(Dictionary(grouping: rows, by: \.title).compactMap { $0.value.count == 1 ? $0.key : nil })
         var observed: [String: LibraryItem] = [:]
         for var row in rows where pinnedChats.contains(row.sessionID) {
-            if row.state == nil, let previous = chatActivity[row.sessionID] {
+            if desktopRunning && chatDesktopRunning, row.state == nil, let previous = chatActivity[row.sessionID] {
                 // A normal read can clear the desktop's unread flag. A missing flag
                 // after streaming establishes only that live activity is no longer reported.
                 switch previous.state {
                 case .ready: row.activityText = "Last response is ready"
                 case .running: row.activityText = "ChatGPT stopped reporting activity"
-                default: row.activityText = previous.activityText
+                default: row.activityText = row.updated > previous.updated ? "Conversation updated in ChatGPT" : previous.activityText
                 }
             }
             observed[row.sessionID] = row
         }
+        chatDesktopRunning = desktopRunning
         chatActivity = observed
         refreshAdapters(now: Date())
     }
@@ -297,6 +299,7 @@ final class Store: ObservableObject {
         for file in files where file.pathExtension == "json" {
             guard let data = try? readPrivateFile(file, limit: 262144), var snapshot = try? Format.decoder().decode(Snapshot.self, from: data),
                   !snapshot.sessionID.isEmpty, !snapshot.title.isEmpty, !snapshot.sentence.isEmpty else { continue }
+            var quietChat = false
             if ["Codex", "ChatGPT"].contains(snapshot.provider) {
                 guard let uuid = UUID(uuidString: snapshot.sessionID),
                       snapshot.sessionID == uuid.uuidString.lowercased(),
@@ -312,15 +315,16 @@ final class Store: ObservableObject {
                         snapshot.desktopChat = true
                         snapshot.title = row.title
                         snapshot.nativeChatTitle = uniqueChatTitles.contains(row.title) ? row.title : nil
-                        snapshot.state = row.state ?? .unavailable
-                        snapshot.sentence = row.activityText ?? "No current activity reported"
+                        quietChat = chatDesktopRunning && row.state == nil
+                        snapshot.state = chatDesktopRunning ? row.state ?? .ready : .unavailable
+                        snapshot.sentence = chatDesktopRunning ? row.activityText ?? "No active turn reported" : "Open ChatGPT to resume monitoring."
                         let id = Identity(origin: .adapter, provider: "ChatGPT", sessionID: snapshot.sessionID)
-                        if let old = cards[id]?.value, old.state == snapshot.state && old.sentence == snapshot.sentence {
-                            snapshot.updatedAt = old.updatedAt
-                        } else if cards[id]?.value.desktopChat == true {
-                            snapshot.updatedAt = now
+                        let sourceDate = row.updated > 0 ? Date(timeIntervalSince1970: row.updated) : snapshot.updatedAt
+                        if let old = cards[id], old.connected && chatDesktopRunning {
+                            let changed = old.value.state != snapshot.state || old.value.sentence != snapshot.sentence
+                            snapshot.updatedAt = changed ? now : max(old.value.updatedAt, sourceDate)
                         } else {
-                            snapshot.updatedAt = row.updated > 0 ? Date(timeIntervalSince1970: row.updated) : now
+                            snapshot.updatedAt = sourceDate
                         }
                     }
                 } else if !hasCodexWriter(file) { snapshot.state = .unavailable }
@@ -336,12 +340,13 @@ final class Store: ObservableObject {
                     snapshot.sentence = "Your decision is waiting for the provider to confirm."
                 }
             }
-            let card = Card(value: snapshot, origin: .adapter, source: file)
+            let card = Card(value: snapshot, origin: .adapter, source: file, quietChat: quietChat)
             seen.insert(card.id)
             put(card)
         }
         for var card in Array(cards.values) where card.origin == .adapter && !seen.contains(card.id) {
             card.source = nil
+            card.quietChat = false
             card.value.state = .unavailable
             card.value.request = nil
             put(card)

@@ -4,7 +4,7 @@
 
 [Website and Mac download](https://erezlev13.github.io/watchnotch/)
 
-Watch selected ChatGPT Work conversations and Codex threads from the notch on your Mac. Click the strip by the camera or use the menu bar item to expand the pinned row. The owl follows the latest live update. Each tile types one short status in white and grows vertically to show the whole sentence. Typing slows at punctuation. Click the summary to reveal it immediately, or enable Reduce Motion to show every update in full.
+Watch selected ChatGPT Chat and Work conversations and Codex threads from the notch on your Mac. Click the strip by the camera or use the menu bar item to expand the pinned row. The owl follows the latest live update. Each tile types one short status in white and grows vertically to show the whole sentence. Typing slows at punctuation. Click the summary to reveal it immediately, or enable Reduce Motion to show every update in full.
 
 When Codex reports a subagent or fork, a small clickable tile inside the pinned parent opens that branch. Each pinned tile is at most 300 points wide. Your display determines how many fit. On a smaller screen, scroll horizontally to reach existing pins.
 
@@ -31,7 +31,7 @@ The app starts with three labeled demo cards. Open the sliders or choose **Sessi
 
 Expand the pinned row and type in **Reply to this session** below **Jump in**. Drafts stay with their own tile when you switch tiles or collapse the row. Press Return or click the arrow to send to a connected Codex thread. If the thread is offline or awaiting input, use **Copy & open** to continue in the original session. ChatGPT uses **Copy & open** for every draft.
 
-The Codex monitor polls its local App Server about every 2.5 seconds. ChatGPT activity refreshes about every three seconds while a chat is pinned or the library is open. The desktop app may report an active Work turn before supplying its title. watchnotch displays that conversation by ID until the title arrives. Account exports and browser imports supply conversation links. Live updates depend on a matching desktop activity signal.
+The Codex monitor polls its local App Server about every 2.5 seconds. ChatGPT activity refreshes about every three seconds while a conversation is pinned or the library is open. A quiet desktop conversation shows **Watching**. If ChatGPT closes, its indexed pins go offline and reconnect when it reopens. The desktop app may report an active Work turn before supplying its title. watchnotch displays that conversation by ID until the title arrives. Account exports and browser imports supply conversation links. Live updates depend on a matching desktop activity signal.
 
 Pins, demo outputs and snapshots are stored locally in the Mac Notch Session Companion folder under Application Support. Independent disposable Codex threads were used to verify delivery of distinct replies to the selected sessions. [Codex adapter](Adapters/Codex/README.md) · [ChatGPT adapter](Adapters/ChatGPT/README.md)
 

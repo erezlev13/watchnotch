@@ -44,7 +44,8 @@ class LibraryTests(unittest.TestCase):
                 for value in [1, 2, 3, 4, 5, 6, 7, 99]:
                     db.execute("INSERT INTO local_thread_catalog VALUES(?,?,0,'chatgpt',0,?)",
                                (f"11111111-1111-4111-8111-{value:012d}", str(value), value))
-            self.assertEqual({r["title"] for r in desktop_items(Path(root)) if r.get("state") == "running"},
+            self.assertTrue(all("state" not in r and "activityText" not in r for r in desktop_items(Path(root))))
+            self.assertEqual({r["title"] for r in desktop_items(Path(root), launched=0) if r.get("state") == "running"},
                              {"1", "3", "5", "6", "7"})
 
     def test_active_turn_appears_before_catalog_and_keeps_identity_when_indexed(self):
