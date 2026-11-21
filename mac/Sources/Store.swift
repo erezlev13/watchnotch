@@ -2,6 +2,17 @@ import Foundation
 import Combine
 import Darwin
 
+// Accessibility elements are inspected and pressed serially outside the UI actor.
+private actor ChatControls {
+    private let reader = DesktopChoices()
+
+    func scan(_ pins: Set<String>) -> [String: PendingRequest] { reader.scan(sessionIDs: pins) }
+
+    func respond(_ decision: Decision) -> Bool {
+        reader.respond(sessionID: decision.sessionID, requestID: decision.requestID, answers: decision.answers ?? [:])
+    }
+}
+
 final class Store: ObservableObject {
     @Published private(set) var cards: [Identity: Card] = [:]
     @Published private(set) var saved = Saved()
@@ -10,6 +21,10 @@ final class Store: ObservableObject {
     @Published private(set) var importedChats: [LibraryItem] = []
     private var uniqueChatTitles = Set<String>()
     private var chatDesktopRunning = false
+    private let desktopChoices = ChatControls()
+    private var chatRequests: [String: PendingRequest] = [:]
+    private var sendingChatRequest: [String: String] = [:]
+    private var handledChatRequest: [String: String] = [:]
     private var chatActivity: [String: LibraryItem] = [:]
     private let root: URL
     let directory: URL
@@ -88,7 +103,11 @@ final class Store: ObservableObject {
     }
     private func put(_ card: Card) { if cards[card.id] != card { cards[card.id] = card } }
     private func persist() {
-        saved.lastKnown = pinned.filter { $0.origin == .adapter }.map(\.value)
+        saved.lastKnown = pinned.filter { $0.origin == .adapter }.map { card in
+            var value = card.value
+            value.request = nil
+            return value
+        }
         do { try Format.encoder().encode(saved).write(to: root.appendingPathComponent("selection.json"), options: .atomic) }
         catch { notice = "Could not save pins: " + error.localizedDescription }
     }
@@ -112,6 +131,7 @@ final class Store: ObservableObject {
     }
     func unpin(_ id: Identity) {
         saved.pins.removeAll { $0 == id }
+        if id.provider == "ChatGPT" && id.origin == .adapter { chatRequests[id.sessionID] = nil }
         saved.watches?.removeAll { $0 == id }
         if id.provider == "Codex", let process = monitors.removeValue(forKey: id.sessionID), process.isRunning { process.terminate() }
         persist()
@@ -251,6 +271,19 @@ final class Store: ObservableObject {
             put(card)
             stage = 2
         }
+        if stage == 2, now.timeIntervalSince(demoStart) >= 14, var card = cards[fixtureID(2)] {
+            let question = RequestQuestion(id: "format", prompt: "How would you like to read the weekly brief?", options: [
+                RequestOption(id: "highlights", label: "Just the highlights"),
+                RequestOption(id: "full", label: "The full brief")
+            ])
+            card.value.request = PendingRequest(id: UUID().uuidString, action: question.prompt, reason: "",
+                expiresAt: now.addingTimeInterval(120), kind: "question", questions: [question])
+            card.value.state = .needsInput
+            card.value.resultURL = nil
+            card.value.updatedAt = now
+            put(card)
+            stage = 3
+        }
         refreshAdapters(now: now)
         for var card in Array(cards.values) where card.value.request.map({ $0.expiresAt <= now }) == true {
             card.value.request = nil
@@ -271,7 +304,13 @@ final class Store: ObservableObject {
         return errno == EWOULDBLOCK
     }
 
-    func updateChatActivity(_ rows: [LibraryItem], desktopRunning: Bool) {
+    @MainActor
+    func scanChatRequests() async -> [String: PendingRequest] {
+        let pins = Set(saved.pins.filter { $0.provider == "ChatGPT" && $0.origin == .adapter }.map(\.sessionID))
+        return await desktopChoices.scan(pins)
+    }
+
+    func updateChatActivity(_ rows: [LibraryItem], desktopRunning: Bool, requests: [String: PendingRequest] = [:]) {
         let pinnedChats = Set(saved.pins.filter { $0.provider == "ChatGPT" && $0.origin == .adapter }.map(\.sessionID))
         uniqueChatTitles = Set(Dictionary(grouping: rows, by: \.title).compactMap { $0.value.count == 1 ? $0.key : nil })
         var observed: [String: LibraryItem] = [:]
@@ -287,6 +326,9 @@ final class Store: ObservableObject {
             }
             observed[row.sessionID] = row
         }
+        chatRequests = desktopRunning ? requests.filter {
+            pinnedChats.contains($0.key) && $0.value.route == "chatDesktop" && $0.value.hasSelectableQuestions
+        } : [:]
         chatDesktopRunning = desktopRunning
         chatActivity = observed
         refreshAdapters(now: Date())
@@ -304,8 +346,12 @@ final class Store: ObservableObject {
                 guard let uuid = UUID(uuidString: snapshot.sessionID),
                       snapshot.sessionID == uuid.uuidString.lowercased(),
                       file.lastPathComponent == snapshot.provider.lowercased() + "-" + snapshot.sessionID + ".json" else { continue }
-                // The bundled adapters only report status and never issue approvals or results.
-                snapshot.request = nil
+                // Bookmarks carry no authority to act. A Codex monitor owns its
+                // snapshot while connected; ChatGPT controls come from the running app.
+                if snapshot.provider == "ChatGPT" || snapshot.request?.route != "codexServer" ||
+                    snapshot.request?.hasSelectableQuestions != true {
+                    snapshot.request = nil
+                }
                 snapshot.resultURL = nil
                 if snapshot.provider == "ChatGPT" {
                     snapshot.state = .unavailable
@@ -327,15 +373,33 @@ final class Store: ObservableObject {
                             snapshot.updatedAt = sourceDate
                         }
                     }
+                    if let request = chatRequests[snapshot.sessionID], request.expiresAt > now {
+                        let key = snapshot.sessionID
+                        let previous = cards[Identity(origin: .adapter, provider: "ChatGPT", sessionID: key)]?.value
+                        let waiting = handledChatRequest[key] == request.id || sendingChatRequest[key] == request.id
+                        snapshot.desktopChat = true
+                        snapshot.state = .needsInput
+                        snapshot.sentence = waiting ? "Check the conversation for the result of your selection." : "This conversation is waiting for your selection."
+                        snapshot.request = waiting ? nil : request
+                        if let previous, previous.request?.id == request.id || (waiting && previous.sentence == snapshot.sentence) {
+                            snapshot.updatedAt = previous.updatedAt
+                        } else { snapshot.updatedAt = now }
+                        quietChat = false
+                    }
                 } else if !hasCodexWriter(file) { snapshot.state = .unavailable }
             }
             if snapshot.state != .needsInput { snapshot.request = nil }
+            if let request = snapshot.request, request.kind != nil || request.questions != nil || request.route != nil,
+               !request.hasSelectableQuestions { snapshot.request = nil }
             if let req = snapshot.request {
                 if req.expiresAt <= now {
                     snapshot.request = nil
                     snapshot.state = .unavailable
                     snapshot.sentence = "The decision expired before a response was delivered."
-                } else if fs.fileExists(atPath: file.path + ".decision") {
+                } else if req.route != "chatDesktop",
+                          let data = try? readPrivateFile(file.appendingPathExtension("decision"), limit: 262144),
+                          let pending = try? Format.decoder().decode(Decision.self, from: data),
+                          pending.provider == snapshot.provider, pending.sessionID == snapshot.sessionID, pending.requestID == req.id {
                     snapshot.request = nil
                     snapshot.sentence = "Your decision is waiting for the provider to confirm."
                 }
@@ -358,7 +422,7 @@ final class Store: ObservableObject {
     func decide(_ id: Identity, requestID: String, allow: Bool) -> Bool {
         tick()
         guard var card = cards[id], let req = card.value.request, card.value.state == .needsInput,
-              req.id == requestID, req.expiresAt > Date() else { notice = "This request is no longer pending."; return false }
+              req.questions == nil, req.id == requestID, req.expiresAt > Date() else { notice = "This request is no longer pending."; return false }
         if card.origin == .fixture {
             guard let index = fixtureTitles.indices.first(where: { fixtureID($0) == id }) else { return false }
             card.value.resultURL = allow ? writeResult(index) : nil
@@ -371,11 +435,73 @@ final class Store: ObservableObject {
             guard let file = card.source else { return false }
             let decision = Decision(provider: id.provider, sessionID: id.sessionID, requestID: req.id, decision: allow ? "allowOnce" : "deny")
             do {
-                try Format.encoder().encode(decision).write(to: file.appendingPathExtension("decision"), options: .withoutOverwriting)
+                try queue(decision, beside: file)
                 card.value.sentence = "Your decision is waiting for the provider to confirm."
             } catch { notice = "Could not deliver the decision: " + error.localizedDescription; return false }
         }
         card.value.request = nil
+        put(card)
+        return true
+    }
+
+    // Publish once, after all bytes have been written. A polling adapter must
+    // never see an incomplete decision or have a second click overwrite one.
+    private func queue(_ decision: Decision, beside file: URL) throws {
+        let destination = file.appendingPathExtension("decision")
+        let temporary = file.deletingLastPathComponent().appendingPathComponent("." + UUID().uuidString)
+        let fd = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        defer { try? fs.removeItem(at: temporary) }
+        let payload = try Format.encoder().encode(decision)
+        guard decision.provider != "Codex" || payload.count <= 65536 else { throw POSIXError(.EMSGSIZE) }
+        try handle.write(contentsOf: payload)
+        try handle.close()
+        guard link(temporary.path, destination.path) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+    }
+
+    @MainActor
+    func answer(_ id: Identity, requestID: String, answers: [String: String]) async -> Bool {
+        tick()
+        guard saved.pins.contains(id), var card = cards[id], card.value.state == .needsInput,
+              let request = card.value.request, request.id == requestID, request.expiresAt > Date() else {
+            notice = "This request is no longer pending."
+            return false
+        }
+        guard request.accepts(answers) else {
+            notice = "Choose an answer for each question."
+            return false
+        }
+        let decision = Decision(provider: id.provider, sessionID: id.sessionID, requestID: requestID, decision: "answer", answers: answers)
+        if card.origin == .fixture {
+            card.value.sentence = answers["format"] == "highlights" ? "Your sample highlights are ready." : "Your full sample brief is ready."
+            card.value.state = .ready
+            card.value.resultURL = writeResult(2)
+        } else if id.provider == "ChatGPT" {
+            guard request.route == "chatDesktop", sendingChatRequest[id.sessionID] == nil,
+                  handledChatRequest[id.sessionID] != requestID else { return false }
+            sendingChatRequest[id.sessionID] = requestID
+            let accepted = await desktopChoices.respond(decision)
+            sendingChatRequest[id.sessionID] = nil
+            if accepted { handledChatRequest[id.sessionID] = requestID }
+            refreshAdapters(now: Date())
+            if !accepted { notice = "Couldn’t confirm that selection. Check the open conversation." }
+            return accepted
+        } else {
+            guard let file = card.source else { return false }
+            do {
+                try queue(decision, beside: file)
+                card.value.sentence = "Your selection is waiting for the session to confirm."
+            } catch let error as POSIXError where error.code == .EMSGSIZE {
+                notice = "The answers exceed 64 KB. Shorten them and try again."
+                return false
+            } catch {
+                notice = "Couldn’t queue your selection. Check whether the session is still waiting."
+                return false
+            }
+        }
+        card.value.request = nil
+        card.value.updatedAt = Date()
         put(card)
         return true
     }

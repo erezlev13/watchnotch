@@ -228,3 +228,73 @@ check(resumed.cards[chatID]?.connected == true && resumed.cards[workID]?.value.s
 resumed.updateChatActivity([workRow], desktopRunning: true)
 check(resumed.cards[chatID]?.connected == false, "missing chat kept its connection")
 print("PASS  Chat and Work pins monitor independently across quiet polls, source changes, disconnect and restart")
+
+let promptRoot = root.appendingPathComponent("interactive")
+let promptDir = promptRoot.appendingPathComponent("Sessions")
+let promptStore = Store(root: promptRoot, directory: promptDir, ticking: false)
+promptStore.pinned.forEach { promptStore.unpin($0.id) }
+let audience = RequestQuestion(id: "audience", prompt: "Who should read the brief?", options: [
+    RequestOption(id: "team", label: "Our team"), RequestOption(id: "all", label: "Everyone")])
+let length = RequestQuestion(id: "length", prompt: "How much detail?", options: [
+    RequestOption(id: "short", label: "Highlights")], allowsOther: true)
+let prompt = PendingRequest(id: "ask-1", action: "Plan the brief", reason: "", expiresAt: Date().addingTimeInterval(120),
+                            kind: "question", questions: [audience, length])
+let choices = ["audience": "team", "length": "One page"]
+let promptFile = promptDir.appendingPathComponent("brief.json")
+var promptSnapshot = Snapshot(provider: "Test", sessionID: "brief", title: "Brief", sentence: "Preparing the brief.",
+                             state: .needsInput, updatedAt: Date(), request: prompt)
+try Format.encoder().encode(promptSnapshot).write(to: promptFile)
+let otherFile = promptDir.appendingPathComponent("other.json")
+let otherPrompt = Snapshot(provider: "Test", sessionID: "other", title: "Brief", sentence: "Waiting for a decision.",
+                           state: .needsInput, updatedAt: Date(), request: req)
+try Format.encoder().encode(otherPrompt).write(to: otherFile)
+promptStore.tick()
+let promptID = Identity(origin: .adapter, provider: "Test", sessionID: "brief")
+let otherID = Identity(origin: .adapter, provider: "Test", sessionID: "other")
+promptStore.pin(promptID)
+promptStore.pin(otherID)
+check(!prompt.accepts(["audience": "all"]) && !prompt.accepts(["audience": "unknown", "length": "short"]), "incomplete or invented choices accepted")
+check(!promptStore.decide(promptID, requestID: prompt.id, allow: true), "question routed as approval")
+let wrongAnswer = await promptStore.answer(otherID, requestID: prompt.id, answers: choices)
+let staleAnswer = await promptStore.answer(promptID, requestID: "stale", answers: choices)
+let queuedAnswer = await promptStore.answer(promptID, requestID: prompt.id, answers: choices)
+let duplicateAnswer = await promptStore.answer(promptID, requestID: prompt.id, answers: choices)
+check(!wrongAnswer && !staleAnswer && queuedAnswer && !duplicateAnswer, "incorrect answer routing")
+let queued = try Format.decoder().decode(Decision.self, from: Data(contentsOf: promptFile.appendingPathExtension("decision")))
+check(queued.provider == "Test" && queued.sessionID == "brief" && queued.requestID == prompt.id && queued.answers == choices, "answer lost its exact session or selections")
+check(promptStore.cards[otherID]?.value.request?.id == req.id, "separate approval disappeared")
+var password = audience
+password.isSecret = true
+var unsupported = prompt
+unsupported.questions = [password]
+check(!unsupported.hasSelectableQuestions, "secret input exposed through decision file")
+unsupported.questions = [audience, audience]
+check(!unsupported.hasSelectableQuestions, "ambiguous question identifiers accepted")
+
+var chatPrompt = prompt
+chatPrompt.route = "chatDesktop"
+workStore.updateChatActivity([chatRow, workRow], desktopRunning: true, requests: [chatKey: chatPrompt])
+check(workStore.cards[chatID]?.value.request == chatPrompt && workStore.cards[chatID]?.value.state == .needsInput &&
+      workStore.cards[workID]?.value.request == nil, "native prompt did not override the right tile's status")
+workStore.updateChatActivity([chatRow, workRow], desktopRunning: false)
+check(workStore.cards[chatID]?.value.request == nil, "desktop buttons survived a disconnect")
+print("PASS  Questions and approvals on independent tiles, exact answers, custom input, stale and duplicate clicks, and disconnect")
+
+let codexID = UUID().uuidString.lowercased()
+let codexFile = promptDir.appendingPathComponent("codex-" + codexID + ".json")
+let lockFile = codexFile.deletingPathExtension().appendingPathExtension("lock")
+let lockFD = open(lockFile.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+check(lockFD >= 0 && flock(lockFD, LOCK_EX | LOCK_NB) == 0, "test monitor could not acquire its writer lock")
+var nativeRequest = prompt
+nativeRequest.route = "codexServer"
+let codexCard = Snapshot(provider: "Codex", sessionID: codexID, title: "Brief", sentence: "Waiting for input",
+                         state: .needsInput, updatedAt: Date(), request: nativeRequest)
+try Format.encoder().encode(codexCard).write(to: codexFile)
+promptStore.tick()
+let codexPin = Identity(origin: .adapter, provider: "Codex", sessionID: codexID)
+check(promptStore.cards[codexPin]?.value.request?.id == nativeRequest.id, "live Codex prompt was stripped")
+close(lockFD)
+promptStore.tick()
+check(promptStore.cards[codexPin]?.value.state == .unavailable && promptStore.cards[codexPin]?.value.request == nil,
+      "a stopped Codex monitor left buttons active")
+print("PASS  Codex controls follow the live monitor connection")
