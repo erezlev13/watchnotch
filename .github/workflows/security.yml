@@ -1,0 +1,47 @@
+name: Verify watchnotch
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '29 5 * * 2'
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: macOS build and tests
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: ./scripts/test.sh
+      - run: ./scripts/build.sh
+      - run: codesign --verify --strict --deep .build/watchnotch.app
+  scan:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ${{ matrix.language == 'swift' && 'macos-15' || 'ubuntu-latest' }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [swift, python, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'swift' && 'manual' || 'none' }}
+          queries: security-extended
+      - if: matrix.language == 'swift'
+        run: ./scripts/build.sh
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          category: /language:${{ matrix.language }}

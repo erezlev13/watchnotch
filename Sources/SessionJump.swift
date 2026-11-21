@@ -79,6 +79,12 @@ struct SessionJump {
         return false
     }
 
+    @MainActor static func openResult(_ url: URL) async -> Bool {
+        if let viewer = Format.resultViewer(url) { return await deliver(url, to: viewer) }
+        guard Format.webResult(url), let browser = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://example.com")!) else { return false }
+        return await deliver(url, to: browser)
+    }
+
     @MainActor private static func deliver(_ url: URL,to app: URL) async -> Bool {
         do {
             _ = try await NSWorkspace.shared.open([url],withApplicationAt: app,configuration: NSWorkspace.OpenConfiguration())

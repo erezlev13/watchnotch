@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum SessionState: String, Codable {
     case running, needsInput, ready, unavailable
@@ -86,12 +87,19 @@ enum Format {
         return (id, URL(string: "https://chatgpt.com/c/" + id)!)
     }
 
-    static func canOpen(_ url: URL, result: Bool, provider: String) -> Bool {
-        if url.isFileURL {
-            return result && ["txt","md","pdf","png","jpg","jpeg","csv"].contains(url.pathExtension.lowercased())
-                && FileManager.default.fileExists(atPath: url.path)
+    static func resultViewer(_ url: URL) -> URL? {
+        var info = stat()
+        guard url.isFileURL, (url.host ?? "").isEmpty || url.host == "localhost",
+              lstat(url.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+              (info.st_mode & 0o111) == 0 else { return nil }
+        switch url.pathExtension.lowercased() {
+        case "md", "txt", "csv": return URL(fileURLWithPath: "/System/Applications/TextEdit.app")
+        case "pdf", "png", "jpg", "jpeg": return URL(fileURLWithPath: "/System/Applications/Preview.app")
+        default: return nil
         }
-        if url.scheme == "codex" { return provider == "Codex" && url.host == "threads" }
-        return url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil
+    }
+
+    static func webResult(_ url: URL) -> Bool {
+        url.scheme == "https" && url.host?.isEmpty == false && url.user == nil && url.password == nil
     }
 }

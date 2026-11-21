@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import tempfile
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -39,7 +40,14 @@ def register(url, title, directory):
         "sessionURL": f"https://chatgpt.com/c/{identifier}",
     }
     try:
-        previous = json.loads(target.read_text(encoding="utf-8"))
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as handle:
+            info = os.fstat(handle.fileno())
+            previous = None
+            if stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_size <= 262144:
+                raw = handle.read(262145)
+                if len(raw) <= 262144:
+                    previous = json.loads(raw)
         if isinstance(previous, dict) and "updatedAt" in previous:
             del previous["updatedAt"]
             if previous == snapshot:

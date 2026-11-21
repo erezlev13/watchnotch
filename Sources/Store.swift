@@ -25,12 +25,13 @@ final class Store: ObservableObject {
         let savedFile = root.appendingPathComponent("selection.json")
         let existing = fs.fileExists(atPath: savedFile.path)
         if existing {
-            do { saved = try Format.decoder().decode(Saved.self, from: Data(contentsOf: savedFile)) }
+            do { saved = try Format.decoder().decode(Saved.self, from: readPrivateFile(savedFile, limit: 4 * 1024 * 1024)) }
             catch { notice = "Could not load saved pins: " + error.localizedDescription }
         }
         for var snapshot in saved.lastKnown {
             snapshot.state = .unavailable
             snapshot.request = nil
+            if ["Codex", "ChatGPT"].contains(snapshot.provider) { snapshot.resultURL = nil }
             put(Card(value: snapshot, origin: .adapter))
         }
         resetDemo()
@@ -39,6 +40,22 @@ final class Store: ObservableObject {
         if ticking {
             timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.tick() }
         }
+    }
+
+    // Validate the opened descriptor so a path change cannot swap in a pipe or a link.
+    private func readPrivateFile(_ url: URL, limit: Int) throws -> Data {
+        let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { throw CocoaError(.fileReadNoPermission) }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+              info.st_uid == geteuid(), info.st_mode & 0o022 == 0, info.st_size <= limit else { throw CocoaError(.fileReadCorruptFile) }
+        var data = Data()
+        while let chunk = try handle.read(upToCount: min(65536, limit + 1 - data.count)), !chunk.isEmpty {
+            data.append(chunk)
+            guard data.count <= limit else { throw CocoaError(.fileReadTooLarge) }
+        }
+        return data
     }
 
     var pinned: [Card] { saved.pins.compactMap { cards[$0] } }
@@ -129,10 +146,9 @@ final class Store: ObservableObject {
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [script.path, address]
+        process.arguments = ["-I", "-S", script.path, address]
         var environment = ProcessInfo.processInfo.environment
         environment["NOTCH_SESSION_DIR"] = directory.path
-        environment["PATH"] = [NSHomeDirectory() + "/.local/bin","/opt/homebrew/bin","/usr/local/bin",environment["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
         process.environment = environment
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -224,23 +240,31 @@ final class Store: ObservableObject {
 
     // Codex holds this advisory lock through reconnects. The kernel releases it if the monitor crashes.
     private func hasCodexWriter(_ file: URL) -> Bool {
-        let fd = open(file.deletingPathExtension().appendingPathExtension("lock").path, O_RDONLY)
+        let fd = open(file.deletingPathExtension().appendingPathExtension("lock").path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { return false }
         defer { close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_uid == geteuid() else { return false }
         if flock(fd, LOCK_EX | LOCK_NB) == 0 { return false }
         return errno == EWOULDBLOCK
     }
 
     private func refreshAdapters(now: Date) {
         let before = pinned.filter { $0.origin == .adapter }.map(\.value)
-        let files = (try? fs.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles)) ?? []
+        let files = (try? fs.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
         var seen = Set<Identity>()
         for file in files where file.pathExtension == "json" {
-            guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 262144,
-                  let data = try? Data(contentsOf: file), var snapshot = try? Format.decoder().decode(Snapshot.self, from: data),
+            guard let data = try? readPrivateFile(file, limit: 262144), var snapshot = try? Format.decoder().decode(Snapshot.self, from: data),
                   !snapshot.sessionID.isEmpty, !snapshot.title.isEmpty, !snapshot.sentence.isEmpty else { continue }
-            if snapshot.provider == "Codex", file.lastPathComponent == "codex-" + snapshot.sessionID + ".json",
-               !hasCodexWriter(file) { snapshot.state = .unavailable }
+            if ["Codex", "ChatGPT"].contains(snapshot.provider) {
+                guard let uuid = UUID(uuidString: snapshot.sessionID),
+                      snapshot.sessionID == uuid.uuidString.lowercased(),
+                      file.lastPathComponent == snapshot.provider.lowercased() + "-" + snapshot.sessionID + ".json" else { continue }
+                // The bundled adapters only report status and never issue approvals or results.
+                snapshot.request = nil
+                snapshot.resultURL = nil
+                if snapshot.provider == "ChatGPT" || !hasCodexWriter(file) { snapshot.state = .unavailable }
+            }
             if snapshot.state != .needsInput { snapshot.request = nil }
             if let req = snapshot.request {
                 if req.expiresAt <= now {

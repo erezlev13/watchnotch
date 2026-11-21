@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import stat
 import struct
 import signal
 import sys
@@ -48,7 +49,12 @@ class Server:
         self.reader = self.sock.makefile("rb")
         self.next_id = 1
         try:
-            self.sock.connect(str(self.path))
+            # Codex publishes a symlink into its per-user daemon directory.
+            endpoint = Path(self.path).resolve(strict=True)
+            info = endpoint.stat()
+            if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
+                raise PermissionError("Expected a Codex socket owned by the current user.")
+            self.sock.connect(str(endpoint))
             nonce = base64.b64encode(os.urandom(16)).decode()
             self.sock.sendall(("GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
                 "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
@@ -196,7 +202,12 @@ def publish(path, snapshot):
 
 @contextmanager
 def session_lock(path):
-    with open(path.with_suffix(".lock"), "a") as handle:
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+    fd = os.open(path.with_suffix(".lock"), flags, 0o600)
+    with os.fdopen(fd, "r+b") as handle:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise PermissionError("Expected a regular monitor lock owned by the current user.")
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

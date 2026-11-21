@@ -106,10 +106,10 @@ owlStore.tick(now: clock.addingTimeInterval(10))
 check(owlStore.watchedSession == demoPins[1],"owl did not follow new demo activity")
 
 func publishActivity(_ key: String, at time: Date, state: SessionState = .running) throws -> Identity {
-    let sample = Snapshot(provider: "Codex",sessionID: key,title: "Same title",sentence: "The task is running.",state: state,updatedAt: time)
+    let sample = Snapshot(provider: "Test",sessionID: key,title: "Same title",sentence: "The task is running.",state: state,updatedAt: time)
     try Format.encoder().encode(sample).write(to: owlDir.appendingPathComponent(key + ".json"),options: .atomic)
     owlStore.tick()
-    let id = Identity(origin: .adapter,provider: "Codex",sessionID: key)
+    let id = Identity(origin: .adapter,provider: "Test",sessionID: key)
     owlStore.pin(id)
     return id
 }
@@ -127,3 +127,31 @@ check(owlStore.watchedSession == nil,"offline card attracted the owl")
 _ = owlStore.addChat("https://chatgpt.com/c/" + UUID().uuidString,title: "Saved conversation")
 check(owlStore.watchedSession == nil,"bookmark reported activity")
 print("PASS  Owl follows the latest pinned active session, prefers live updates and ignores bookmarks and quiet polls")
+
+let linked = sessions.appendingPathComponent("linked.json")
+let outside = root.appendingPathComponent("elsewhere.json")
+try Format.encoder().encode(sample).write(to: outside)
+try fs.createSymbolicLink(at: linked, withDestinationURL: outside)
+let pipe = sessions.appendingPathComponent("pipe.json")
+check(mkfifo(pipe.path, 0o600) == 0, "could not create test pipe")
+restart.tick()
+check(restart.cards[live.id]?.source == nil, "session reader followed a symbolic link")
+
+var observer = local
+observer.state = .needsInput
+observer.request = req
+observer.resultURL = outside
+try Format.encoder().encode(observer).write(to: sessions.appendingPathComponent("codex-" + key + ".json"))
+restart.tick()
+let observed = restart.cards[Identity(origin: .adapter, provider: "Codex", sessionID: key)]!
+check(observed.value.request == nil && observed.value.resultURL == nil && observed.value.state == .unavailable, "observer supplied unsupported actions")
+
+let document = root.appendingPathComponent("sample-2.txt")
+check(Format.resultViewer(document)?.lastPathComponent == "TextEdit.app", "plain text viewer unavailable")
+let alias = root.appendingPathComponent("linked.txt")
+try fs.createSymbolicLink(at: alias, withDestinationURL: document)
+check(Format.resultViewer(alias) == nil, "accepted a linked result")
+try fs.setAttributes([.posixPermissions: 0o700], ofItemAtPath: document.path)
+check(Format.resultViewer(document) == nil, "accepted executable result")
+check(!Format.webResult(nativeURL) && Format.webResult(privateURL), "result URL scheme validation")
+print("PASS  Private snapshot reads, observer capabilities and constrained result viewers")

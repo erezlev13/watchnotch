@@ -19,6 +19,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fallback = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Mac Notch Session Companion")
         let root = env["NOTCH_DATA_DIR"].map { URL(fileURLWithPath: $0) } ?? fallback
         let sessions = env["NOTCH_SESSION_DIR"].map { URL(fileURLWithPath: $0) } ?? root.appendingPathComponent("Sessions")
+        // Older adapter-first installations may have created a readable parent directory.
+        // Only repair app-owned default paths. A custom path may serve another purpose.
+        do {
+            for (folder, managed) in [(root, env["NOTCH_DATA_DIR"] == nil), (sessions, env["NOTCH_SESSION_DIR"] == nil)] {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+                let fd = open(folder.path, O_DIRECTORY | O_NOFOLLOW | O_RDONLY | O_CLOEXEC)
+                guard fd >= 0 else { throw CocoaError(.fileReadNoPermission) }
+                defer { close(fd) }
+                var info = stat()
+                guard fstat(fd, &info) == 0, info.st_uid == geteuid() else { throw CocoaError(.fileReadNoPermission) }
+                if managed {
+                    guard fchmod(fd, 0o700) == 0 else { throw CocoaError(.fileWriteNoPermission) }
+                } else if info.st_mode & 0o077 != 0 { throw CocoaError(.fileReadNoPermission) }
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "watchnotch needs private session storage"
+            alert.informativeText = "Use directories owned by your account with permissions set to 700."
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
         let firstLaunch = !FileManager.default.fileExists(atPath: root.appendingPathComponent("selection.json").path)
         let edit = NSMenu(title: "Edit")
         for (title, action, key) in [("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
@@ -33,8 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = main
         store = Store(root: root, directory: sessions)
         for pin in store.saved.watches ?? [] where store.saved.pins.contains(pin) {
-            let address = store.cards[pin]?.value.sessionURL?.absoluteString ?? pin.sessionID
-            _ = store.watchCodex(address)
+            if pin.provider == "Codex" { _ = store.watchCodex(pin.sessionID) }
         }
         panel = NotchPanel(contentRect: .zero,styleMask: [.borderless,.nonactivatingPanel],backing: .buffered,defer: false)
         panel.isOpaque = false
@@ -103,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) { store?.stopMonitors() }
 }
 
+umask(0o077)
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let delegate = AppDelegate()
