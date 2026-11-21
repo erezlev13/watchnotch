@@ -5,11 +5,56 @@ enum SessionState: String, Codable {
     case running, needsInput, ready, unavailable
 }
 
+struct RequestOption: Codable, Equatable, Identifiable {
+    let id: String
+    let label: String
+    var description: String?
+}
+
+struct RequestQuestion: Codable, Equatable, Identifiable {
+    let id: String
+    let prompt: String
+    let options: [RequestOption]
+    var allowsOther: Bool?
+    var isSecret: Bool?
+}
+
 struct PendingRequest: Codable, Equatable {
     let id: String
     let action: String
     let reason: String
     let expiresAt: Date
+    var route: String?
+    var kind: String?
+    var questions: [RequestQuestion]?
+
+    var hasSelectableQuestions: Bool {
+        guard let questions, !id.isEmpty, ["approval", "question"].contains(kind),
+              !questions.isEmpty, Set(questions.map(\.id)).count == questions.count else { return false }
+        return questions.allSatisfy { question in
+            !question.id.isEmpty && !question.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            question.isSecret != true && (!question.options.isEmpty || question.allowsOther == true) &&
+            (kind != "approval" || question.allowsOther != true) &&
+            Set(question.options.map(\.id)).count == question.options.count &&
+            question.options.allSatisfy { !$0.id.isEmpty && !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+    }
+
+    func accepts(_ answers: [String: String]) -> Bool {
+        guard hasSelectableQuestions, let questions, questions.count == answers.count else { return false }
+        return questions.allSatisfy { question in
+            guard let answer = answers[question.id] else { return false }
+            return question.options.contains { $0.id == answer } ||
+                (question.allowsOther == true && answer.utf8.count <= 8192 &&
+                 !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+}
+
+struct SessionDetails: Codable, Equatable {
+    let model: String?
+    let effort: String?
+    let tokens: Int64?
 }
 
 struct Snapshot: Codable, Equatable {
@@ -21,6 +66,9 @@ struct Snapshot: Codable, Equatable {
     var updatedAt: Date
     var sessionURL: URL?
     var resultURL: URL?
+    var nativeChatTitle: String?
+    var desktopChat: Bool?
+    var details: SessionDetails?
     var request: PendingRequest?
 }
 
@@ -36,6 +84,8 @@ struct Card: Identifiable, Equatable {
     var value: Snapshot
     let origin: Origin
     var source: URL?
+    var quietChat = false
+    var connected: Bool { value.state != .unavailable }
     var id: Identity { Identity(origin: origin, provider: value.provider, sessionID: value.sessionID) }
 }
 
@@ -51,6 +101,7 @@ struct Decision: Codable {
     let sessionID: String
     let requestID: String
     let decision: String
+    var answers: [String: String]?
 }
 
 enum Format {
@@ -102,4 +153,35 @@ enum Format {
     static func webResult(_ url: URL) -> Bool {
         url.scheme == "https" && url.host?.isEmpty == false && url.user == nil && url.password == nil
     }
+}
+
+struct TileLayout {
+    static let gap: CGFloat = 14
+    static let inset: CGFloat = 16
+    static let minimum: CGFloat = 244
+    static let maximum: CGFloat = 300
+    let available: CGFloat
+    var capacity: Int { max(1, Int((available - 2 * Self.inset + Self.gap) / (Self.minimum + Self.gap))) }
+    func tileWidth(for count: Int) -> CGFloat {
+        let visible = CGFloat(min(capacity, max(1, count)))
+        return max(1, min(Self.maximum, floor((available - 2 * Self.inset - (visible - 1) * Self.gap) / visible)))
+    }
+    func rowWidth(for count: Int) -> CGFloat {
+        let visible = CGFloat(min(capacity, max(1, count)))
+        return min(available, 2 * Self.inset + visible * tileWidth(for: count) + (visible - 1) * Self.gap)
+    }
+}
+
+struct LibraryItem: Codable, Identifiable {
+    let provider: String
+    let sessionID: String
+    let title: String
+    let updated: Double
+    var state: SessionState?
+    var work: Bool?
+    var desktopChat: Bool?
+    var activityText: String?
+    var parentID: String?
+    var branchKind: String?
+    var id: Identity { Identity(origin: .adapter, provider: provider, sessionID: sessionID) }
 }

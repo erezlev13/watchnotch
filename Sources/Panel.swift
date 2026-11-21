@@ -1,13 +1,25 @@
 import SwiftUI
+import ApplicationServices
 import AppKit
 
 private let accent = Color(red: 0.66, green: 0.86, blue: 0.76)
 extension Card {
     var label: String {
         if origin == .fixture { return "Demo" }
-        if value.provider == "ChatGPT" && value.state == .unavailable && value.sessionURL != nil { return "Saved link" }
+        if value.provider == "ChatGPT" && value.state == .unavailable && value.sessionURL != nil {
+            return value.desktopChat == true ? "Offline" : "Saved link"
+        }
         return value.state == .unavailable ? "Offline" : "Connected"
     }
+    var stateName: String {
+        switch value.state {
+        case .running: return "Working"
+        case .needsInput: return "Needs input"
+        case .ready: return quietChat ? "Watching" : "Ready"
+        case .unavailable: return label
+        }
+    }
+
     var tint: Color {
         switch value.state {
         case .running: return Color.cyan
@@ -23,6 +35,7 @@ final class PanelState: ObservableObject {
     @Published var managing = false
     @Published var displayWidth: CGFloat = 1024
     @Published var rowHeight: CGFloat = 240
+    let replies = TileReplies()
     var shownSentences: [Identity: String] = [:]
 }
 
@@ -37,10 +50,11 @@ struct PanelView: View {
     @ObservedObject var panel: PanelState
     let toggle: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var source = "ChatGPT"
-    @State private var link = ""
-    @State private var title = ""
-    @State private var webLink = ""
+    @StateObject private var library = SessionLibrary()
+    private var branchParents: [String] {
+        guard panel.expanded && !panel.managing else { return [] }
+        return store.saved.pins.filter { $0.origin == .adapter && $0.provider == "Codex" }.map(\.sessionID)
+    }
     var body: some View {
         Group {
             if !panel.expanded {
@@ -59,7 +73,7 @@ struct PanelView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "rectangle.split.3x1").foregroundStyle(accent)
                         Text(panel.managing ? "Manage sessions" : "Pinned sessions").font(.system(size: 12,weight: .semibold))
-                        Text("\(store.pinned.count)/5").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        Text("\(store.pinned.count)/\(store.pinLimit)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                         Divider().frame(height: 12)
                         Button { panel.managing.toggle(); store.notice = nil } label: {
                             Image(systemName: panel.managing ? "checkmark" : "slider.horizontal.3")
@@ -74,19 +88,17 @@ struct PanelView: View {
                         }.padding(8).background(.black.opacity(0.88),in: Capsule())
                     }
                     if panel.managing {
-                        ScrollView { manage.padding(16) }
-                            .background(.black.opacity(0.88),in: RoundedRectangle(cornerRadius: 16))
+                        SessionSettings(store: store, library: library)
                     } else if store.pinned.isEmpty {
                         Button("Pin a session") { panel.managing = true }
                             .padding(10).background(.black.opacity(0.82),in: Capsule())
                     } else {
-                        let count = CGFloat(store.pinned.count)
-                        let gap: CGFloat = 16
-                        let width = max(216,(panel.displayWidth - 32 - (count - 1) * gap) / count)
+                        let gap = TileLayout.gap
+                        let width = TileLayout(available: panel.displayWidth).tileWidth(for: store.pinned.count)
                         ScrollView([.horizontal,.vertical],showsIndicators: false) {
                             HStack(alignment: .top,spacing: gap) {
                                 ForEach(Array(store.pinned.enumerated()), id: \.element.id) { index, card in
-                                    SessionTile(card: card, store: store, panel: panel, index: index, width: width)
+                                    SessionTile(card: card, store: store, panel: panel, index: index, width: width, branches: card.origin == .adapter && card.value.provider == "Codex" ? library.branches[card.value.sessionID] ?? [] : [])
                                         .frame(width: width)
                                 }
                             }.padding(.top,17)
@@ -112,42 +124,25 @@ struct PanelView: View {
                     }
                 }.padding(.top,3).frame(maxWidth: .infinity,maxHeight: .infinity,alignment: .top)
             }
+        }.task(id: panel.managing && panel.expanded || store.saved.pins.contains { $0.provider == "ChatGPT" && $0.origin == .adapter }) {
+            guard panel.managing && panel.expanded || store.saved.pins.contains(where: { $0.provider == "ChatGPT" && $0.origin == .adapter }) else { return }
+            while !Task.isCancelled {
+                await library.refreshChats(store: store)
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+            }
+        }.task(id: branchParents) {
+            let parents = branchParents
+            var poll = 0
+            repeat {
+                await library.refreshBranches(for: parents, includeForks: poll.isMultiple(of: 12))
+                poll += 1
+                if parents.isEmpty || Task.isCancelled { return }
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+            } while !Task.isCancelled
         }.buttonStyle(.plain).foregroundStyle(Color.white)
             .environment(\.colorScheme,.dark)
     }
 
-    private var manage: some View {
-        VStack(alignment: .leading,spacing: 10) {
-            Picker("Add session",selection: $source) {
-                Text("ChatGPT").tag("ChatGPT")
-                Text("Codex").tag("Codex")
-            }.pickerStyle(.segmented)
-            TextField(source == "ChatGPT" ? "Private conversation URL" : "Thread ID or codex://threads/ link", text: $link).textFieldStyle(.roundedBorder)
-            if source == "ChatGPT" { TextField("Session title",text: $title).textFieldStyle(.roundedBorder) }
-            if source == "Codex" {
-                TextField("Web link for this thread (optional)",text: $webLink).textFieldStyle(.roundedBorder)
-            }
-            Button(source == "ChatGPT" ? "Pin conversation link" : "Watch Codex thread") {
-                let success = source == "ChatGPT" ? store.addChat(link,title: title) : store.watchCodex(link,webLink: webLink)
-                if success { link = ""; title = ""; webLink = ""; panel.managing = false }
-            }.buttonStyle(.bordered).disabled(link.isEmpty)
-            Divider()
-            ForEach(store.catalog) { card in
-                let pinned = store.saved.pins.contains(card.id)
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(card.value.title).font(.callout.weight(.medium))
-                        Text(card.value.provider + " · " + card.label).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(pinned ? "Unpin" : "Pin") { if pinned { store.unpin(card.id) } else { store.pin(card.id) } }
-                        .buttonStyle(.bordered).disabled(!pinned && store.saved.pins.count >= 5)
-                }
-            }
-            Divider()
-            Button("Replay demo events") { store.resetDemo(); panel.managing = false }.foregroundStyle(accent)
-        }
-    }
 }
 
 private struct SessionTile: View {
@@ -156,6 +151,7 @@ private struct SessionTile: View {
     let panel: PanelState
     let index: Int
     let width: CGFloat
+    let branches: [LibraryItem]
     @Environment(\.accessibilityReduceTransparency) private var solid
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var entered = false
@@ -163,15 +159,8 @@ private struct SessionTile: View {
     @State private var receipt: String?
     @State private var hovered = false
 
-    private var stateName: String {
-        switch card.value.state {
-        case .running: return "Working"
-        case .needsInput: return "Needs input"
-        case .ready: return "Ready"
-        case .unavailable: return card.label == "Saved link" ? "Saved link" : "Offline"
-        }
-    }
 
+    @State private var showingDetails = false
     @State private var opening = false
     private var jump: SessionJump? { SessionJump(card: card,pairedWebLink: store.saved.webLinks?[card.value.sessionID]) }
 
@@ -181,6 +170,9 @@ private struct SessionTile: View {
         Task { @MainActor in
             defer { opening = false }
             if await route.open(browserOnly: browserOnly) { panel.expanded = false }
+            else if card.value.provider == "ChatGPT" && !browserOnly {
+                store.notice = AXIsProcessTrusted() ? "This chat isn’t visible in ChatGPT. Use Open in browser on the tile." : "Allow watchnotch in System Settings → Privacy & Security → Accessibility, then try Jump in again."
+            }
             else { store.notice = "Could not open " + card.value.title + (route.web == nil ? ". Add its web link in Manage sessions if one exists." : ". Check the session link and try again.") }
         }
     }
@@ -192,31 +184,63 @@ private struct SessionTile: View {
                 Image(systemName: card.value.provider == "Codex" ? "terminal" : "bubble.left")
                 Text(card.value.provider).fontWeight(.semibold)
                 if card.origin == .fixture { Text("· Demo").foregroundStyle(.white.opacity(0.65)) }
-                else if card.value.state != .unavailable { Text("· Live").foregroundStyle(accent) }
+                else if card.connected { Text("· Live").foregroundStyle(accent) }
                 Spacer(minLength: 2)
+                Button { showingDetails.toggle() } label: {
+                    Image(systemName: "info.circle").frame(width: 22, height: 22)
+                }
+                .help("Model, reasoning effort and session tokens")
+                .accessibilityLabel("Session details for " + card.value.title)
+                .popover(isPresented: $showingDetails, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(card.value.title).font(.headline).lineLimit(2)
+                        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 7) {
+                            GridRow { Text("Model"); Text(card.value.details?.model ?? "Not reported") }
+                            GridRow { Text("Effort"); Text(card.value.details?.effort ?? "Not reported") }
+                            GridRow { Text("Session tokens"); Text(card.value.details?.tokens?.formatted() ?? "Not reported") }
+                        }.font(.callout).textSelection(.enabled)
+                    }.padding(16).frame(maxWidth: 340, alignment: .leading)
+                }
                 ActivityMark(state: card.value.state,tint: card.tint)
-                Text(stateName).foregroundStyle(card.tint)
+                Text(card.stateName).foregroundStyle(card.tint)
             }.font(.system(size: 10.5,weight: .medium))
             VStack(alignment: .leading,spacing: 5) {
                 Text(card.value.title).font(.system(size: 17,weight: .semibold)).lineLimit(2)
-                TypedStatus(sentence: card.value.sentence, id: card.id, panel: panel)
+                if card.value.request == nil {
+                    if card.value.state == .needsInput {
+                        Text(card.value.sentence).font(.system(size: 13, weight: .medium))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        TypedStatus(sentence: card.value.sentence, id: card.id, panel: panel)
+                    }
+                }
             }
             if let request = card.value.request {
                 Divider()
-                VStack(alignment: .leading,spacing: 3) {
-                    Text(request.action).font(.system(size: 12,weight: .semibold))
-                    Text(request.reason).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                if request.hasSelectableQuestions, let questions = request.questions {
+                    RequestChoices(request: request, questions: questions, sessionTitle: card.value.title) { answers in
+                        if await store.answer(card.id, requestID: request.id, answers: answers) {
+                            let response = request.kind == "approval" ? "Decision" : "Answer"
+                            let delivered = card.origin == .fixture || request.route == "chatDesktop"
+                            receipt = response + (delivered ? " sent" : " queued")
+                        }
+                    }.id(request.id)
+                } else if request.kind == nil && request.questions == nil {
+                    VStack(alignment: .leading,spacing: 3) {
+                        Text(request.action).font(.system(size: 13,weight: .semibold))
+                        Text(request.reason).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                    }.fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button { resolve(request, allow: true) } label: {
+                            Label("Approve once",systemImage: "checkmark").padding(.horizontal,9).padding(.vertical,5)
+                                .foregroundStyle(Color.black).background(accent,in: Capsule())
+                        }.accessibilityLabel("Approve once for " + card.value.title)
+                        Button { resolve(request, allow: false) } label: {
+                            Text("Deny").padding(.horizontal,10).padding(.vertical,5)
+                                .background(.white.opacity(0.13),in: Capsule())
+                        }.accessibilityLabel("Deny for " + card.value.title)
+                    }.font(.system(size: 12,weight: .semibold)).buttonStyle(DecisionButtonStyle())
                 }
-                HStack(spacing: 8) {
-                    Button { resolve(request, allow: true) } label: {
-                        Label("Approve once",systemImage: "checkmark").padding(.horizontal,9).padding(.vertical,5)
-                            .foregroundStyle(Color.black).background(accent,in: Capsule())
-                    }.accessibilityLabel("Approve once for " + card.value.title)
-                    Button { resolve(request, allow: false) } label: {
-                        Text("Deny").padding(.horizontal,10).padding(.vertical,5)
-                            .background(.white.opacity(0.13),in: Capsule())
-                    }.accessibilityLabel("Deny for " + card.value.title)
-                }.font(.system(size: 12,weight: .semibold)).buttonStyle(DecisionButtonStyle())
             } else {
                 HStack {
                     if let receipt {
@@ -237,15 +261,44 @@ private struct SessionTile: View {
                 }
             }
             if let jump {
-                Button { navigate(jump) } label: {
-                    Label("Jump in",systemImage: "arrow.up.forward.app").font(.caption.weight(.semibold))
-                        .padding(.horizontal,9).padding(.vertical,5).background(.white.opacity(0.12),in: Capsule())
-                }.disabled(opening).help("Return to " + card.value.title)
-                    .accessibilityLabel("Jump in to " + card.value.title)
-                    .contextMenu {
-                        if jump.web != nil { Button("Open in browser") { navigate(jump,browserOnly: true) } }
+                let jumpLabel = card.value.state == .needsInput && card.value.request == nil ? "Open session" : "Jump in"
+                HStack {
+                    Button { navigate(jump) } label: {
+                        Label(jumpLabel, systemImage: "arrow.up.forward.app").font(.caption.weight(.semibold))
+                            .padding(.horizontal, 9).padding(.vertical, 5).background(.white.opacity(0.12), in: Capsule())
+                    }.disabled(opening).help("Return to " + card.value.title)
+                        .accessibilityLabel(jumpLabel + ", " + card.value.title)
+                        .contextMenu {
+                            if jump.web != nil { Button("Open in browser") { navigate(jump, browserOnly: true) } }
+                        }
+                    if card.value.provider == "ChatGPT" {
+                        Button { navigate(jump, browserOnly: true) } label: { Image(systemName: "globe") }
+                            .help("Open in browser").accessibilityLabel("Open in browser")
                     }
+                }
             }
+            if !branches.isEmpty {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 6) {
+                        ForEach(branches) { branch in
+                            let value = Snapshot(provider: "Codex", sessionID: branch.sessionID, title: branch.title, sentence: "", state: branch.state ?? .unavailable, updatedAt: Date(timeIntervalSince1970: branch.updated))
+                            let child = Card(value: value, origin: .adapter)
+                            Button {
+                                if let route = SessionJump(card: child) { navigate(route) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label(branch.branchKind == "Fork" && branch.state == .unavailable ? "Fork" : (branch.branchKind ?? "Branch") + " · " + child.stateName, systemImage: "arrow.triangle.branch")
+                                        .font(.caption2).foregroundStyle(child.tint)
+                                    Text(branch.title).font(.caption.weight(.semibold)).lineLimit(1)
+                                }.padding(.horizontal, 8).padding(.vertical, 5)
+                                    .frame(maxWidth: 152, alignment: .leading)
+                                    .background(child.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                            }.help("Open " + branch.title).accessibilityLabel("Open " + (branch.branchKind ?? "branch") + " " + branch.title)
+                        }
+                    }
+                }
+            }
+            TileReply(card: card, jump: jump, replies: panel.replies)
         }.padding(14).frame(maxWidth: .infinity,alignment: .leading)
             .background {
                 shape.fill(Color(red: 0.042,green: 0.054,blue: 0.068).opacity(solid ? 1 : 0.82))
@@ -255,7 +308,7 @@ private struct SessionTile: View {
             .overlay { shape.strokeBorder(.white.opacity(hovered ? 0.38 : 0.20),lineWidth: 1) }
             .shadow(color: .black.opacity(0.27),radius: 5,y: 4)
              .scaleEffect(reduceMotion || entered ? 1 : 0.88,anchor: .top)
-            .offset(x: reduceMotion || entered ? 0 : (panel.displayWidth / 2 - (16 + (width + 16) * CGFloat(index) + width / 2)) * 0.12,
+            .offset(x: reduceMotion || entered ? 0 : (TileLayout(available: panel.displayWidth).rowWidth(for: store.pinned.count) / 2 - (16 + (width + TileLayout.gap) * CGFloat(index) + width / 2)) * 0.12,
                     y: reduceMotion ? 0 : (!entered ? -20 : (hovered ? -2 : 0)))
             .opacity(entered || reduceMotion ? 1 : 0)
             .onAppear {
@@ -283,8 +336,105 @@ private struct SessionTile: View {
     private func resolve(_ request: PendingRequest, allow: Bool) {
         if store.decide(card.id,requestID: request.id,allow: allow) {
             withAnimation(reduceMotion ? nil : .spring(response: 0.33,dampingFraction: 0.72)) {
-                receipt = card.origin == .fixture ? (allow ? "Approved" : "Denied") : "Decision sent"
+                receipt = card.origin == .fixture ? (allow ? "Approved" : "Denied") : "Decision queued"
             }
+        }
+    }
+}
+
+private struct RequestChoices: View {
+    let request: PendingRequest
+    let questions: [RequestQuestion]
+    let sessionTitle: String
+    let onSubmit: @MainActor ([String: String]) async -> Void
+
+    @State private var answers: [String: String] = [:]
+    @State private var drafts: [String: String] = [:]
+    @State private var submitting = false
+
+    private var complete: Bool { request.accepts(answers) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if request.kind == "approval", !request.action.isEmpty, !questions.contains(where: { $0.prompt == request.action }) {
+                Text(request.action).font(.system(size: 13, weight: .semibold))
+            }
+            if !request.reason.isEmpty, request.reason != request.action, !questions.contains(where: { $0.prompt == request.reason }) {
+                Text(request.reason).font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(questions, id: \.id) { question in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(question.prompt)
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(question.options, id: \.id) { option in
+                        let selected = answers[question.id] == option.id && drafts[question.id] == nil
+                        Button {
+                            drafts.removeValue(forKey: question.id)
+                            answers[question.id] = option.id
+                            if questions.count == 1 { send() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.label).font(.system(size: 12, weight: .semibold))
+                                    if let detail = option.description, !detail.isEmpty {
+                                        Text(detail).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer(minLength: 2)
+                                Image(systemName: selected ? "checkmark.circle.fill" : (questions.count > 1 ? "circle" : "chevron.right"))
+                                    .font(.caption2).foregroundStyle(selected ? accent : .secondary)
+                                    .accessibilityHidden(true)
+                            }
+                            .padding(.horizontal, 9).padding(.vertical, 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(selected ? accent.opacity(0.18) : Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 7))
+                            .contentShape(Rectangle())
+                        }.accessibilityHint(questions.count == 1 ? "Send this choice to " + sessionTitle : "Select for " + question.prompt)
+                         .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                    if question.allowsOther == true {
+                        customAnswer(for: question)
+                    }
+                }
+            }
+            if submitting {
+                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("Sending…").font(.caption) }
+            } else if questions.count > 1 || questions.first.map({ drafts[$0.id] != nil || $0.options.isEmpty }) == true {
+                Button(action: send) {
+                    Label(questions.count > 1 ? "Send answers" : "Send answer", systemImage: "arrow.up")
+                        .font(.caption.weight(.semibold)).padding(.horizontal, 10).padding(.vertical, 5)
+                        .foregroundStyle(Color.black).background(accent, in: Capsule())
+                }.disabled(!complete).opacity(complete ? 1 : 0.5)
+            }
+        }
+        .disabled(submitting)
+        .buttonStyle(DecisionButtonStyle())
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func customAnswer(for question: RequestQuestion) -> some View {
+        let text = Binding<String>(
+            get: { drafts[question.id] ?? "" },
+            set: { value in
+                drafts[question.id] = value
+                answers[question.id] = value
+            })
+        let placeholder = question.options.isEmpty ? "Your answer" : "Write another answer"
+        return TextField(placeholder, text: text)
+            .textFieldStyle(.plain).font(.callout).padding(7)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            .accessibilityLabel(placeholder + " for " + question.prompt)
+            .onSubmit { if questions.count == 1 { send() } }
+    }
+
+    private func send() {
+        guard !submitting, complete else { return }
+        submitting = true
+        let response = answers
+        Task { @MainActor in
+            await onSubmit(response)
+            submitting = false
         }
     }
 }
@@ -328,44 +478,71 @@ private struct TypedStatus: View {
     let id: Identity
     let panel: PanelState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var visible = ""
-    @State private var typing = false
+    @State private var script = StatusScript()
+    @State private var sampleTime: TimeInterval = 0
+
+    private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
     var body: some View {
-        // Reserve the final sentence's space so typing never shifts the decision buttons.
-        Text(sentence).hidden().accessibilityHidden(true)
-            .overlay(alignment: .topLeading) {
-                Text("\(reduceMotion ? sentence : visible)\(Text(typing && !reduceMotion ? "▏" : "").foregroundColor(accent))").foregroundStyle(.white)
-                    .accessibilityHidden(true)
-            }
-            .font(.system(size: 13,weight: .medium,design: .monospaced))
+        let displayed = script.current ?? sentence
+        let progress = script.progress(at: sampleTime)
+        Text(displayed)
+            .font(.system(size: 13, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white)
+            .lineSpacing(2)
+            .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
-            .accessibilityElement(children: .ignore)
-            .accessibilityHidden(false)
-            .accessibilityLabel(sentence)
-            .task(id: sentence) {
-                if reduceMotion || panel.shownSentences[id] == sentence {
-                    visible = sentence
-                    typing = false
-                    return
-                }
-                panel.shownSentences[id] = sentence
-                visible = ""
-                typing = true
-                let characters = Array(sentence)
-                let batch = max(1,(characters.count + 49) / 50)
-                var end = 0
-                while end < characters.count {
-                    guard !Task.isCancelled else { return }
-                    let next = min(characters.count,end + batch)
-                    visible.append(contentsOf: characters[end..<next])
-                    end = next
-                    if end < characters.count {
-                        do { try await Task.sleep(nanoseconds: 20_000_000) }
-                        catch { return }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .mask {
+                if script.current == nil && !reduceMotion && panel.shownSentences[id] != sentence {
+                    Color.clear
+                } else if script.phase == .revealing && !reduceMotion {
+                    GeometryReader { bounds in
+                        let height = max(1, bounds.size.height)
+                        let feather = min(14, height)
+                        let edge = progress * (height + feather)
+                        LinearGradient(stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .white, location: max(0, (edge - feather) / height)),
+                            .init(color: .clear, location: min(1, edge / height)),
+                            .init(color: .clear, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
                     }
+                } else {
+                    Color.white
                 }
-                typing = false
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { script.reveal(at: now) }
+            .help(script.phase == .revealing ? "Click to read the full update now" : displayed)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(displayed)
+            .accessibilityAction(named: "Reveal full update") { script.reveal(at: now) }
+            .onAppear {
+                script.receive(sentence, at: now, animate: !reduceMotion && panel.shownSentences[id] != sentence)
+            }
+            .onChange(of: sentence) { update in
+                script.receive(update, at: now, animate: !reduceMotion)
+            }
+            .onChange(of: reduceMotion) { reduced in
+                if reduced { script.reveal(at: now) }
+            }
+            .onDisappear {
+                panel.shownSentences[id] = script.current
+                script = StatusScript()
+            }
+            .task(id: script.deadline) {
+                guard let deadline = script.deadline else { return }
+                while now < deadline {
+                    let remaining = max(0, deadline - now)
+                    let revealing = script.phase == .revealing
+                    let delay = revealing ? min(1.0 / 30, remaining) : remaining
+                    do { try await Task.sleep(nanoseconds: UInt64(ceil(delay * 1_000_000_000))) }
+                    catch { return }
+                    if revealing && !Task.isCancelled { sampleTime = now }
+                }
+                guard !Task.isCancelled, script.deadline == deadline else { return }
+                script.advance(at: now, animate: !reduceMotion)
             }
     }
 }

@@ -1,0 +1,26 @@
+import Foundation
+
+var script = StatusScript()
+script.receive("Looking into the issue.", at: 0, animate: true)
+let firstEnd = script.deadline!
+script.receive("Found the cause.", at: firstEnd / 3, animate: true)
+script.receive("Found the cause.", at: firstEnd / 2, animate: true)
+script.receive("The fix is ready.", at: firstEnd / 2, animate: true)
+assert(script.current == "Looking into the issue." && script.deadline == firstEnd)
+assert(script.progress(at: firstEnd / 2) == 0.5)
+script.advance(at: firstEnd, animate: true)
+assert(script.phase == .reading && script.progress(at: firstEnd) == 1)
+let holdEnd = script.deadline!
+script.advance(at: holdEnd - 0.1, animate: true)
+assert(script.current == "Looking into the issue.")
+script.advance(at: holdEnd, animate: true)
+assert(script.current == "Found the cause." && script.phase == .revealing)
+script.reveal(at: holdEnd + 0.1)
+assert(script.phase == .reading && script.progress(at: holdEnd + 0.1) == 1)
+script.advance(at: script.deadline!, animate: false)
+assert(script.current == "The fix is ready." && script.phase == .reading)
+script.advance(at: script.deadline!, animate: false)
+assert(script.phase == .shown && script.deadline == nil)
+script.receive("The fix is ready.", at: 100, animate: true)
+assert(script.phase == .shown)
+print("PASS  Status sentences finish revealing, remain readable and advance in order")
