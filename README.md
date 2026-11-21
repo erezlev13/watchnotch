@@ -44,3 +44,7 @@ The film shows example sessions from local preview `177379b`. These notes includ
 - **Session controls on Mac.** Use **+** to open a new Codex, ChatGPT or ChatGPT Work composer. **Automatically show active sessions** temporarily adds working or waiting threads alongside your pins. **End session** offers to archive a Codex thread. **Stop response** stops a supported desktop ChatGPT turn and keeps the conversation available.
 
 For provider behavior, connection options and verification details, see the [Codex adapter guide](mac/Adapters/Codex/README.md) and the [ChatGPT desktop guide](mac/Adapters/ChatGPT/README.md).
+
+## License
+
+Copyright © 2026 Erez Lev. All rights reserved. You may build and run WatchNotch as documented. Reusing its code or artwork in another product or redistributing the app requires written permission. See the [license](LICENSE) for terms and permission requests.
