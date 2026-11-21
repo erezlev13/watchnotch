@@ -47,4 +47,4 @@ For provider behavior, connection options and verification details, see the [Cod
 
 ## License
 
-Copyright © 2026 Erez Lev. All rights reserved. You may build and run WatchNotch as documented. Reusing its code or artwork in another product or redistributing the app requires written permission. See the [license](LICENSE) for terms and permission requests.
+WatchNotch is open source under the [MIT License](LICENSE). Copyright © 2026 Erez Lev.

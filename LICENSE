@@ -1,16 +1,21 @@
-WatchNotch
-Copyright © 2026 Erez Lev. All rights reserved.
+MIT License
 
-You may download and run official WatchNotch previews and make the local
-copies needed to build and run WatchNotch as described in its documentation.
+Copyright (c) 2026 Erez Lev
 
-Other copying, modification, creation of derivative works, redistribution,
-sublicensing, or sale of WatchNotch code, documentation, or original artwork
-requires prior written permission from Erez Lev. This includes incorporating
-those materials into another product. To request permission, contact the
-maintainer through https://github.com/erezlev13/watchnotch/issues.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-These terms apply only to material for which Erez Lev holds the copyright.
-Third-party materials remain subject to their respective licenses. These
-terms preserve rights granted by applicable law and the rights to view and
-fork a public repository under GitHub's Terms of Service.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
