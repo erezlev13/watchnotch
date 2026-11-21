@@ -7,6 +7,7 @@ MACOSX_DEPLOYMENT_TARGET=13.0 swiftc -swift-version 5 -O -module-cache-path "$PW
 cp Resources/watchnotch.icns "$app/Contents/Resources/watchnotch.icns"
 cp ../docs/media/owl-small.png "$app/Contents/Resources/watching-owl.png"
 cp Info.plist "$app/Contents/Info.plist"
+cp ../shared/account_usage.py "$app/Contents/Resources/account_usage.py"
 cp Adapters/Codex/monitor.py "$app/Contents/Resources/monitor.py"
 cp Adapters/ChatGPT/library.py "$app/Contents/Resources/library.py"
 codesign --force --options runtime --sign - "$app"

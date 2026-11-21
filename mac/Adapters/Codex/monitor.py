@@ -3,7 +3,7 @@
 import argparse
 import base64
 import hashlib
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
 import json
@@ -12,7 +12,6 @@ import re
 import shlex
 from pathlib import Path
 import socket
-import sqlite3
 import stat
 import struct
 import signal
@@ -273,21 +272,6 @@ def recent_progress(server, key, cache):
     return turn["status"], cache.get(turn["id"], "")
 
 
-def thread_tokens(key, directory=None):
-    root = directory or Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
-    path = root / "state_5.sqlite"
-    try:
-        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=0.1)) as db:
-            db.execute("PRAGMA trusted_schema=OFF")
-            row = db.execute("SELECT tokens_used FROM threads WHERE id = ?", (key,)).fetchone()
-            # Zero is the store's default before usage has been recorded.
-            if row and type(row[0]) is int and row[0] > 0:
-                return row[0]
-    except (sqlite3.Error, ValueError):
-        pass
-    return None
-
-
 def read_snapshot(server, key, link=None, cache=None):
     try:
         thread = server.call("thread/read", {"threadId": key, "includeTurns": False})["thread"]
@@ -314,8 +298,7 @@ def read_snapshot(server, key, link=None, cache=None):
         sentence += "."
     result = {"provider": "Codex", "sessionID": key, "title": title,
               "state": state, "sentence": sentence}
-    result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort"),
-                         "tokens": thread_tokens(key)}
+    result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort")}
     if link:
         result["sessionURL"] = link
     return result
@@ -384,7 +367,18 @@ def main():
     parser.add_argument("--cursor", help="Continue a thread listing")
     parser.add_argument("session", nargs="?", help="Desktop thread link or UUID")
     parser.add_argument("--socket", type=Path, help="Optional App Server control socket")
+    parser.add_argument("--usage", action="store_true", help="Read account usage percentages")
     args = parser.parse_args()
+    if args.usage:
+        # Isolated Python omits the script directory from sys.path. The signed
+        # app bundles this helper alongside the monitor.
+        here = Path(__file__).resolve().parent
+        helpers = here if (here / "account_usage.py").is_file() else here.parents[2] / "shared"
+        sys.path.insert(0, str(helpers))
+        from account_usage import read_usage
+        with Server(args.socket) as server:
+            print(json.dumps(read_usage(server)))
+        return 0
     if args.list or args.loaded:
         params = {"limit": 60, "currentAccountOnly": True}
         if args.cursor:

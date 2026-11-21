@@ -1,8 +1,5 @@
 import unittest
-from pathlib import Path
-import sqlite3
-import tempfile
-from monitor import activity, read_snapshot, thread_tokens
+from monitor import activity, read_snapshot
 
 
 class Server:
@@ -52,15 +49,5 @@ class ProgressTest(unittest.TestCase):
         s.turn = "interrupted"
         self.assertIn("interrupted", read_snapshot(s, "sample")["sentence"])
 
-    def test_live_gist_and_session_usage(self):
+    def test_live_gist(self):
         self.assertEqual(activity({"type": "agentMessage", "text": "Okay! I’m checking the Windows build."}), "Checking the Windows build.")
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            db = sqlite3.connect(root / "state_5.sqlite")
-            db.execute("CREATE TABLE threads(id, tokens_used)")
-            db.executemany("INSERT INTO threads VALUES(?,?)", [("one", 2345), ("two", 913), ("new", 0)])
-            db.commit()
-            db.close()
-            self.assertEqual(thread_tokens("one", root), 2345)
-            self.assertIsNone(thread_tokens("absent", root))
-            self.assertIsNone(thread_tokens("new", root))

@@ -18,7 +18,7 @@ def usage_windows(reply):
     by_id = reply.get("rateLimitsByLimitId")
     buckets = dict(by_id) if isinstance(by_id, dict) else {}
     legacy = reply.get("rateLimits") or {}
-    if legacy and (not buckets or legacy.get("limitId")):
+    if legacy and legacy not in buckets.values():
         buckets.setdefault(legacy.get("limitId") or "codex", legacy)
     rows = []
     for key, bucket in sorted(buckets.items()):

@@ -13,6 +13,24 @@ from panel import Panel
 @unittest.skipUnless(sys.platform == "win32" or os.environ.get("WATCHNOTCH_TEST_UI") == "1",
                      "Requires a desktop session")
 class PanelTests(unittest.TestCase):
+    def test_account_usage_window(self):
+        with TemporaryDirectory() as tmp:
+            root = tk.Tk()
+            try:
+                panel = Panel(root, Path(tmp) / "library.json")
+                def complete(_name, read, display):
+                    display(read())
+                with patch.object(panel, "job", side_effect=complete), patch("panel.account_usage") as usage:
+                    usage.return_value = [{"label": "Weekly", "usedPercent": 14}]
+                    panel.show_usage()
+                    self.assertEqual(panel.usage_text.get(), "Weekly  14% used")
+                    panel.usage_dialog.destroy()
+                    usage.return_value = []
+                    panel.show_usage()
+                    self.assertEqual(panel.usage_text.get(), "Account usage unavailable.")
+            finally:
+                root.destroy()
+
     def test_open_library_pin_collapse_reopen_and_remove(self):
         with TemporaryDirectory() as tmp, patch.object(Panel, "discover"):
             root = tk.Tk()

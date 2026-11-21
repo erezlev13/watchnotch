@@ -135,6 +135,7 @@ private struct SessionTile: View {
         }
     }
 
+    @State private var usage: [UsageWindow]?
     @State private var showingDetails = false
     @State private var opening = false
     private var jump: SessionJump? { SessionJump(card: card,pairedWebLink: store.saved.webLinks?[card.value.sessionID]) }
@@ -158,10 +159,13 @@ private struct SessionTile: View {
                 if card.origin == .fixture { Text("· Demo").foregroundStyle(.white.opacity(0.65)) }
                 else if card.value.state != .unavailable { Text("· Live").foregroundStyle(accent) }
                 Spacer(minLength: 2)
-                Button { showingDetails.toggle() } label: {
+                Button {
+                    usage = nil
+                    showingDetails.toggle()
+                } label: {
                     Image(systemName: "info.circle").frame(width: 22, height: 22)
                 }
-                .help("Model, reasoning effort and session tokens")
+                .help("Model, reasoning effort and Codex account usage")
                 .accessibilityLabel("Session details for " + card.value.title)
                 .popover(isPresented: $showingDetails, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -169,9 +173,24 @@ private struct SessionTile: View {
                         Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 7) {
                             GridRow { Text("Model"); Text(card.value.details?.model ?? "Not reported") }
                             GridRow { Text("Effort"); Text(card.value.details?.effort ?? "Not reported") }
-                            GridRow { Text("Session tokens"); Text(card.value.details?.tokens?.formatted() ?? "Not reported") }
+                            if card.origin == .adapter && card.value.provider == "Codex" {
+                                Text("Codex account usage").font(.headline)
+                                if let usage {
+                                    if usage.isEmpty { Text("Account usage unavailable") }
+                                    ForEach(usage.indices, id: \.self) { i in
+                                        GridRow { Text(usage[i].label); Text("\(usage[i].usedPercent)% used") }
+                                    }
+                                } else {
+                                    Text("Reading account limits…")
+                                }
+                            }
                         }.font(.callout).textSelection(.enabled)
                     }.padding(16).frame(maxWidth: 340, alignment: .leading)
+                    .task {
+                        guard card.origin == .adapter && card.value.provider == "Codex" else { return }
+                        let windows = (try? await SessionLibrary.accountUsage()) ?? []
+                        if !Task.isCancelled { usage = windows }
+                    }
                 }
                 ActivityMark(state: card.value.state,tint: card.tint)
                 Text(stateName).foregroundStyle(card.tint)
