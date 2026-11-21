@@ -47,7 +47,7 @@ Pins, demo outputs and snapshots are stored locally in the Mac Notch Session Com
 
 ## Mac features in development
 
-These instructions refer to the combined local preview at revision `177379bb8e6133ec67952ba5fddabdfc986f2358`. The Mac test suites and signed build passed.
+These instructions refer to the combined local preview at revision `1f0dd9d1972ba3af7bfaf1803eb022ced71458da`. The Mac test suites and signed build passed.
 
 The development build expands a tile’s draft to six lines, then scrolls. Shift-Return inserts a line break. To add one screenshot, copy a selection with Control–Shift–Command–4, then paste in the reply field or choose **Paste image**. Use the × beside its thumbnail to remove it.
 
@@ -61,7 +61,7 @@ In the local development build, open **Session library → Claude**. Paste a pri
 
 Claude Code discovery requires an installed CLI that supports `claude agents --json --all`. Its local session list reports working, waiting and ready states. Use **Copy attach command** for a background job or **Copy resume command** for an interactive session. Run the copied command in the project terminal. Review questions and permissions in Claude Code. When automatic display is enabled, an active Claude Code session can appear before you pin it.
 
-The Claude feature build was checked on a Mac with a free Claude Desktop account. **Jump in** reopened the exact chat after switching to another conversation. Watchnotch also discovered a real local Claude Code session and displayed **Needs input**, matching the CLI. The live Desktop transition from **Working** to **Ready** and resuming a signed-in Claude Code model turn are still unverified.
+The Claude feature build was checked on a Mac with a free Claude Desktop account. **Jump in** reopened the exact chat after switching to another conversation. Watchnotch also discovered a saved Claude Code background job whose last recorded state was **Needs input**. When the CLI supplies neither a process ID nor live status, the current build marks the job unavailable. Its description can still show the last reported activity. The live Desktop transition from **Working** to **Ready** and resuming a signed-in Claude Code model turn are still unverified.
 
 ### Automatic display and session controls
 

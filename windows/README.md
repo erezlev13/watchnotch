@@ -34,7 +34,7 @@ Open **Account usage** on a Codex card to see the percentage used in each report
 
 The local Windows preview also accepts private Claude Desktop chat links of the form `https://claude.ai/chat/<UUID>`. Pin the saved link, use **Jump in** to open it through the registered Claude app or an HTTPS fallback, and use **Copy & open** to bring a draft along. Open-chat activity detection is a Mac feature.
 
-With a native Claude CLI that supports `claude agents --json --all`, the library can also discover local Claude Code sessions and show the status reported by the CLI. **Copy attach command** or **Copy resume command** puts the selected session’s command on the clipboard. Run it in the original project terminal. Handle questions and permissions in Claude Code.
+With a native Claude CLI that supports `claude agents --json --all`, the library can also discover local Claude Code sessions and show the status reported by the CLI. A saved background job with neither a process ID nor live status appears unavailable. Its description can show the last reported activity. **Copy attach command** or **Copy resume command** puts the selected session’s command on the clipboard. Run it in the original project terminal. Handle questions and permissions in Claude Code.
 
 ## Verification and remaining parity work
 
