@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -49,10 +50,11 @@ final class SessionLibrary: ObservableObject {
         let args = ["--desktop"] + (launch.map { ["--launched", String($0.timeIntervalSince1970)] } ?? [])
         do {
             let page = try await Self.read("library",arguments: args)
+            let requests = launch != nil ? await store.scanChatRequests() : [:]
             try Task.checkCancellation()
             desktopRunning = launch != nil
             desktopChats = page.items
-            store.updateChatActivity(desktopChats, desktopRunning: desktopRunning)
+            store.updateChatActivity(desktopChats, desktopRunning: desktopRunning, requests: requests)
         } catch is CancellationError {
         } catch {
             desktopRunning = false
@@ -171,13 +173,15 @@ struct SessionSettings: View {
         if section != "Demo" {
             items = items.map { item in
                 guard identity(item).origin != .fixture else { return item }
+                let pending = store.cards[item.id]?.value.request != nil
                 if var chat = desktop[item.id] {
                     chat.desktopChat = true
+                    if pending { chat.state = .needsInput }
                     return chat
                 }
                 var row = item
                 row.desktopChat = nil
-                row.state = library.activity[item.id]
+                row.state = pending ? .needsInput : library.activity[item.id]
                 return row
             }
         }
@@ -317,6 +321,13 @@ struct SessionSettings: View {
                     Label("ChatGPT history",systemImage: "bubble.left.and.bubble.right").font(.callout.bold())
                     Text("Desktop chats appear automatically. For more, find visited chats or import your account export.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false,vertical: true)
+                    if !AXIsProcessTrusted() && (section == "ChatGPT" || store.pinned.contains(where: { $0.origin == .adapter && $0.value.provider == "ChatGPT" })) {
+                        Button("Enable buttons for open ChatGPT prompts…") {
+                            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+                            _ = AXIsProcessTrustedWithOptions(options)
+                            library.message = "Allow watchnotch under Privacy & Security → Accessibility to answer prompts in open ChatGPT conversations."
+                        }.foregroundStyle(mint)
+                    }
                     HStack(spacing: 10) {
                         Button {
                             section = "ChatGPT"

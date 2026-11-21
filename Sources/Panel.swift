@@ -206,24 +206,41 @@ private struct SessionTile: View {
             }.font(.system(size: 10.5,weight: .medium))
             VStack(alignment: .leading,spacing: 5) {
                 Text(card.value.title).font(.system(size: 17,weight: .semibold)).lineLimit(2)
-                TypedStatus(sentence: card.value.sentence, id: card.id, panel: panel)
+                if card.value.request == nil {
+                    if card.value.state == .needsInput {
+                        Text(card.value.sentence).font(.system(size: 13, weight: .medium))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        TypedStatus(sentence: card.value.sentence, id: card.id, panel: panel)
+                    }
+                }
             }
             if let request = card.value.request {
                 Divider()
-                VStack(alignment: .leading,spacing: 3) {
-                    Text(request.action).font(.system(size: 12,weight: .semibold))
-                    Text(request.reason).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                if request.hasSelectableQuestions, let questions = request.questions {
+                    RequestChoices(request: request, questions: questions, sessionTitle: card.value.title) { answers in
+                        if await store.answer(card.id, requestID: request.id, answers: answers) {
+                            let response = request.kind == "approval" ? "Decision" : "Answer"
+                            let delivered = card.origin == .fixture || request.route == "chatDesktop"
+                            receipt = response + (delivered ? " sent" : " queued")
+                        }
+                    }.id(request.id)
+                } else if request.kind == nil && request.questions == nil {
+                    VStack(alignment: .leading,spacing: 3) {
+                        Text(request.action).font(.system(size: 13,weight: .semibold))
+                        Text(request.reason).font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                    }.fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Button { resolve(request, allow: true) } label: {
+                            Label("Approve once",systemImage: "checkmark").padding(.horizontal,9).padding(.vertical,5)
+                                .foregroundStyle(Color.black).background(accent,in: Capsule())
+                        }.accessibilityLabel("Approve once for " + card.value.title)
+                        Button { resolve(request, allow: false) } label: {
+                            Text("Deny").padding(.horizontal,10).padding(.vertical,5)
+                                .background(.white.opacity(0.13),in: Capsule())
+                        }.accessibilityLabel("Deny for " + card.value.title)
+                    }.font(.system(size: 12,weight: .semibold)).buttonStyle(DecisionButtonStyle())
                 }
-                HStack(spacing: 8) {
-                    Button { resolve(request, allow: true) } label: {
-                        Label("Approve once",systemImage: "checkmark").padding(.horizontal,9).padding(.vertical,5)
-                            .foregroundStyle(Color.black).background(accent,in: Capsule())
-                    }.accessibilityLabel("Approve once for " + card.value.title)
-                    Button { resolve(request, allow: false) } label: {
-                        Text("Deny").padding(.horizontal,10).padding(.vertical,5)
-                            .background(.white.opacity(0.13),in: Capsule())
-                    }.accessibilityLabel("Deny for " + card.value.title)
-                }.font(.system(size: 12,weight: .semibold)).buttonStyle(DecisionButtonStyle())
             } else {
                 HStack {
                     if let receipt {
@@ -244,12 +261,13 @@ private struct SessionTile: View {
                 }
             }
             if let jump {
+                let jumpLabel = card.value.state == .needsInput && card.value.request == nil ? "Open session" : "Jump in"
                 HStack {
                     Button { navigate(jump) } label: {
-                        Label("Jump in", systemImage: "arrow.up.forward.app").font(.caption.weight(.semibold))
+                        Label(jumpLabel, systemImage: "arrow.up.forward.app").font(.caption.weight(.semibold))
                             .padding(.horizontal, 9).padding(.vertical, 5).background(.white.opacity(0.12), in: Capsule())
                     }.disabled(opening).help("Return to " + card.value.title)
-                        .accessibilityLabel("Jump in to " + card.value.title)
+                        .accessibilityLabel(jumpLabel + ", " + card.value.title)
                         .contextMenu {
                             if jump.web != nil { Button("Open in browser") { navigate(jump, browserOnly: true) } }
                         }
@@ -318,8 +336,105 @@ private struct SessionTile: View {
     private func resolve(_ request: PendingRequest, allow: Bool) {
         if store.decide(card.id,requestID: request.id,allow: allow) {
             withAnimation(reduceMotion ? nil : .spring(response: 0.33,dampingFraction: 0.72)) {
-                receipt = card.origin == .fixture ? (allow ? "Approved" : "Denied") : "Decision sent"
+                receipt = card.origin == .fixture ? (allow ? "Approved" : "Denied") : "Decision queued"
             }
+        }
+    }
+}
+
+private struct RequestChoices: View {
+    let request: PendingRequest
+    let questions: [RequestQuestion]
+    let sessionTitle: String
+    let onSubmit: @MainActor ([String: String]) async -> Void
+
+    @State private var answers: [String: String] = [:]
+    @State private var drafts: [String: String] = [:]
+    @State private var submitting = false
+
+    private var complete: Bool { request.accepts(answers) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if request.kind == "approval", !request.action.isEmpty, !questions.contains(where: { $0.prompt == request.action }) {
+                Text(request.action).font(.system(size: 13, weight: .semibold))
+            }
+            if !request.reason.isEmpty, request.reason != request.action, !questions.contains(where: { $0.prompt == request.reason }) {
+                Text(request.reason).font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(questions, id: \.id) { question in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(question.prompt)
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(question.options, id: \.id) { option in
+                        let selected = answers[question.id] == option.id && drafts[question.id] == nil
+                        Button {
+                            drafts.removeValue(forKey: question.id)
+                            answers[question.id] = option.id
+                            if questions.count == 1 { send() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.label).font(.system(size: 12, weight: .semibold))
+                                    if let detail = option.description, !detail.isEmpty {
+                                        Text(detail).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer(minLength: 2)
+                                Image(systemName: selected ? "checkmark.circle.fill" : (questions.count > 1 ? "circle" : "chevron.right"))
+                                    .font(.caption2).foregroundStyle(selected ? accent : .secondary)
+                                    .accessibilityHidden(true)
+                            }
+                            .padding(.horizontal, 9).padding(.vertical, 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(selected ? accent.opacity(0.18) : Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 7))
+                            .contentShape(Rectangle())
+                        }.accessibilityHint(questions.count == 1 ? "Send this choice to " + sessionTitle : "Select for " + question.prompt)
+                         .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                    if question.allowsOther == true {
+                        customAnswer(for: question)
+                    }
+                }
+            }
+            if submitting {
+                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("Sending…").font(.caption) }
+            } else if questions.count > 1 || questions.first.map({ drafts[$0.id] != nil || $0.options.isEmpty }) == true {
+                Button(action: send) {
+                    Label(questions.count > 1 ? "Send answers" : "Send answer", systemImage: "arrow.up")
+                        .font(.caption.weight(.semibold)).padding(.horizontal, 10).padding(.vertical, 5)
+                        .foregroundStyle(Color.black).background(accent, in: Capsule())
+                }.disabled(!complete).opacity(complete ? 1 : 0.5)
+            }
+        }
+        .disabled(submitting)
+        .buttonStyle(DecisionButtonStyle())
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func customAnswer(for question: RequestQuestion) -> some View {
+        let text = Binding<String>(
+            get: { drafts[question.id] ?? "" },
+            set: { value in
+                drafts[question.id] = value
+                answers[question.id] = value
+            })
+        let placeholder = question.options.isEmpty ? "Your answer" : "Write another answer"
+        return TextField(placeholder, text: text)
+            .textFieldStyle(.plain).font(.callout).padding(7)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            .accessibilityLabel(placeholder + " for " + question.prompt)
+            .onSubmit { if questions.count == 1 { send() } }
+    }
+
+    private func send() {
+        guard !submitting, complete else { return }
+        submitting = true
+        let response = answers
+        Task { @MainActor in
+            await onSubmit(response)
+            submitting = false
         }
     }
 }

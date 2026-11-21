@@ -27,7 +27,13 @@ The app starts with three labeled demo cards. Open the sliders or choose **Sessi
 | --- | --- | --- |
 | Codex | Pin a local thread from the library, or use **Add link** with its UUID or desktop link. | Shows a summary from visible agent messages and recognized activity. The ⓘ button shows the configured model, reasoning effort and recorded session tokens when available. Use the reply arrow to send to the selected thread. |
 | ChatGPT and ChatGPT Work | Pin a conversation from the desktop catalog, browser history or an export, or paste its private conversation link. | Shows status supplied by the desktop app. Use the reply arrow to submit through the ChatGPT desktop composer with macOS Accessibility permission. A conversation known only by its link can still open in the browser. |
-| Demo | Pin a sample from the picker. **Replay demo events** resets the timeline. | Simulates independent approvals and replies. Approve once writes the selected session’s sample file. Deny skips it. Decisions expire after two minutes. |
+| Demo | Pin a sample from the picker. **Replay demo events** resets the timeline. | Simulates a question with two answer choices, independent approvals and replies. Approve once writes the selected session’s sample file. Deny skips it. Decisions expire after two minutes. |
+
+## Answer a question or approval
+
+In the source build, a pending question takes the place of the animated update. Read the full prompt and click a choice. If Codex asks several questions together, select each answer and click **Send answers**. A command approval shows what Codex wants to run and offers a one-time decision. Other tiles keep their own controls.
+
+For ChatGPT Chat and Work, open the pinned conversation in the Mac app and enable **Accessibility** for watchnotch in System Settings. The tile can mirror supported single-choice questions and one-time approvals while their controls are visible. Use **Open session** when the provider reports that it needs input without exposing usable controls.
 
 ## Reply from the notch
 
