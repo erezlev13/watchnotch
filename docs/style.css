@@ -58,6 +58,18 @@ figcaption { margin-top: 10px; line-height: 1.5 }
 .steps small { color: var(--accent); font-weight: 620 }
 h3 { font-size: 23px; letter-spacing: -.04em; margin: 5px 0 8px }
 .steps p + p { margin-top: 8px }
+.hero-availability { margin-top: 9px; font-size: 14px !important; max-width: 62ch !important }
+.for-everyone { margin: clamp(40px, 6vw, 72px) 0 clamp(54px, 8vw, 110px) }
+.everyone-lead { max-width: 67ch; font-size: clamp(17px, 1.7vw, 21px) }
+.use-cases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 25px 0 }
+.use-cases article { background: #fffdf8; border: 1px solid var(--line); border-radius: 18px; padding: 19px }
+.use-cases article small { color: var(--accent); letter-spacing: .02em; font-weight: 700 }
+.use-cases h3 { font-size: 21px; line-height: 1.15; margin: 8px 0 9px }
+.use-cases p { font-size: 14px }
+.provider-note { max-width: 86ch; border-left: 3px solid var(--accent); padding-left: 15px; font-size: 14px }
+.provider-note a { text-decoration: underline; text-underline-offset: .15em }
+@media (max-width: 900px) { .use-cases { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 470px) { .use-cases { grid-template-columns: 1fr } .use-cases article { padding: 17px } }
 footer { border-top: 1px solid var(--line); padding: 24px 0 34px }
 @media (max-width: 720px) {
   header { height: 64px }
