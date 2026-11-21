@@ -12,7 +12,7 @@ A subagent appears inside its pinned parent while working or waiting for input a
 
 The public 0.1.7 download includes queued summaries and active subagent tiles. The source build also keeps quiet ChatGPT conversations connected and restores monitoring when the desktop app reopens. [Watch three queued updates](../docs/media/vertical-summary.gif)
 
-[Watch the 44-second feature film](https://erezlev13.github.io/watchnotch/#tour) for a walkthrough of the download, public source build and features in development. The film uses example conversations.
+[Watch the 64-second feature film](https://erezlev13.github.io/watchnotch/#tour) for a walkthrough of the download, public source build and features in development. The film uses example conversations.
 
 ## Build and open
 
@@ -47,11 +47,27 @@ Pins, demo outputs and snapshots are stored locally in the Mac Notch Session Com
 
 ## Mac features in development
 
+These instructions refer to the combined local preview at revision `177379bb8e6133ec67952ba5fddabdfc986f2358`. The Mac test suites and signed build passed. Live activity detection through Claude Desktop Accessibility still needs an end-to-end check.
+
 The development build expands a tile’s draft to six lines, then scrolls. Shift-Return inserts a line break. To add one screenshot, copy a selection with Control–Shift–Command–4, then paste in the reply field or choose **Paste image**. Use the × beside its thumbnail to remove it.
 
 For a connected Codex thread, the send arrow submits the image and optional caption together. For ChatGPT, **Copy image & open** places the screenshot on the clipboard. Paste and send it in the destination conversation. Watchnotch can stage the caption in an empty desktop composer, and **Copy text & open** makes the caption available separately.
 
 With Accessibility access, an open, pinned ChatGPT conversation can also show a short preview of its last observed assistant reply. Scroll to the bottom of the transcript so watchnotch can observe the latest reply. The preview stays in memory and can show up to 240 characters. A matching open window can connect a pin even before its catalog entry appears. When the desktop composer offers **Queue** during an active turn, the tile can send a follow-up and show **Queued in ChatGPT**.
+
+### Claude Desktop and Claude Code
+
+In the local development build, open **Session library → Claude**. Paste a private Claude Desktop chat link, pin it and use **Jump in** to return to the conversation. **Copy & open** hands off a draft. Choose **Enable Claude Desktop activity…** and grant Accessibility access to discover open chats. The open chat’s title, URL and English composer controls supply its identity and activity. A visible Stop response button indicates that Claude is working.
+
+Claude Code discovery requires an installed CLI that supports `claude agents --json --all`. Its local session list reports working, waiting and ready states. Use **Copy attach command** for a background job or **Copy resume command** for an interactive session. Run the copied command in the project terminal. Review questions and permissions in Claude Code.
+
+### Automatic display and session controls
+
+In the development library, enable **Automatically show active sessions** to show working sessions and sessions waiting for input beside your pins. Temporary tiles disappear when idle, and manual pins keep their order. Use **+** in the expanded strip to open a fresh Codex, ChatGPT or ChatGPT Work composer. The ChatGPT option can open a new browser chat if the desktop app is unavailable.
+
+On a Codex tile, **End session** asks you to confirm **End and archive**. The thread history stays in the archive and its tile is removed. On a desktop ChatGPT tile, **Stop response** stops a turn when the matching composer exposes the control and Accessibility is enabled. The chat remains available. Approval choices preserve the scope shown by the desktop app, including labels such as **Allow this conversation** and **Cancel** when offered.
+
+For local rebuilds, the development build script uses a single available Apple Development identity automatically. With several identities, set `WATCHNOTCH_SIGNING_IDENTITY` to the certificate fingerprint. Keeping the same signer and installed copy helps preserve Accessibility access. An ad-hoc rebuild can require a fresh grant.
 
 ## Jump back to a session
 

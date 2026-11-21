@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#fcf8f1">
-  <meta name="description" content="Follow pinned Codex and ChatGPT sessions from your Mac notch. Watch a short tour of live updates, questions, approvals and replies.">
+  <meta name="description" content="Pin Codex and ChatGPT sessions to your Mac notch. Explore live updates, replies and approvals, plus Claude support and session controls in the local preview.">
   <title>watchnotch — Your AI sessions at a glance</title>
   <link rel="icon" type="image/png" href="media/owl-small.png">
   <link rel="stylesheet" href="style.css">
@@ -20,7 +20,7 @@
     <div class="herocopy">
       <h1>Your sessions,<br><em>within reach.</em></h1>
       <div class="intro">
-        <p>Pin Codex and ChatGPT to your Mac notch. The owl follows the latest update, so you can see which session needs you while you work.</p>
+        <p>Pin Codex and ChatGPT to your Mac notch. The owl follows the latest update, so you can see which session needs you while you work. The local preview also follows Claude chats and coding sessions.</p>
         <div class="actions"><a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.7/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a><a class="watch" href="#tour">Watch the film <span aria-hidden="true">↘</span></a></div>
         <small>Apple silicon · macOS 13 or later · Preview 0.1.7</small>
       </div>
@@ -29,14 +29,14 @@
   </section>
 
   <section id="tour" aria-labelledby="tour-title">
-    <div class="section-heading"><h2 id="tour-title">Inside the notch.</h2><span>Mac feature film · 44 seconds</span></div>
+    <div class="section-heading"><h2 id="tour-title">Inside the notch.</h2><span>Mac feature film · 1 min 4 sec</span></div>
     <figure>
       <video id="film" aria-label="Watchnotch Mac feature film" aria-describedby="film-caption" width="1920" height="1080" controls playsinline preload="none" poster="media/feature-tour.jpg">
         <source src="media/feature-tour.mp4" type="video/mp4">
         <track kind="captions" src="media/feature-tour.vtt" srclang="en" label="English descriptions">
         <a href="media/feature-tour.mp4">Open the feature film</a>
       </video>
-      <figcaption id="film-caption">A silent walkthrough with example sessions. Jump to a moment below.</figcaption>
+      <figcaption id="film-caption">A silent walkthrough with example sessions from Mac preview 0.1.7, the public source and local preview <code>177379b</code>. Jump to a moment below.</figcaption>
     </figure>
     <nav class="chapters" aria-label="Film chapters">
       <a href="media/feature-tour.mp4#t=0"><time datetime="PT0S">0:00</time>Pin a session</a>
@@ -46,6 +46,9 @@
       <a href="media/feature-tour.mp4#t=24"><time datetime="PT24S">0:24</time>Desktop replies</a>
       <a href="media/feature-tour.mp4#t=30"><time datetime="PT30S">0:30</time>Previews &amp; queues</a>
       <a href="media/feature-tour.mp4#t=36"><time datetime="PT36S">0:36</time>Screenshots</a>
+      <a href="media/feature-tour.mp4#t=44"><time datetime="PT44S">0:44</time>Claude</a>
+      <a href="media/feature-tour.mp4#t=51"><time datetime="PT51S">0:51</time>Session controls</a>
+      <a href="media/feature-tour.mp4#t=58"><time datetime="PT58S">0:58</time>Automatic display</a>
     </nav>
   </section>
 
@@ -88,6 +91,14 @@
       <p>Each Mac tile keeps its own draft when you switch pins or collapse the row. In preview 0.1.7, the arrow sends text to Codex, and <strong>Copy &amp; open</strong> hands a ChatGPT draft to its conversation. The Mac source build can send text to the verified desktop ChatGPT composer. Control-click the arrow for the clipboard handoff.</p>
       <figure class="reply-example"><img src="media/reply-tiles.png" alt="Two example Mac tiles in preview 0.1.7 with a wrapped Codex build update, a text reply field and a ChatGPT Copy &amp; open field." width="1292" height="644" loading="lazy"><figcaption>Two pinned sessions in Mac preview 0.1.7.</figcaption></figure>
       <p>In the development build, Shift-Return adds a line. The editor grows to six lines, then scrolls. Copy a screenshot with Control–Shift–Command–4 and paste it into the tile, or choose <strong>Paste image</strong>. Remove it with ×. Codex accepts the image with an optional caption. For ChatGPT, paste the copied image in the conversation and send it there.</p>
+    </details>
+    <details><summary>Follow Claude Desktop and Claude Code</summary>
+      <p><strong>In development on Mac and Windows.</strong> Pin a private Claude Desktop chat link and use <strong>Jump in</strong> or <strong>Copy &amp; open</strong>. On Mac, choose <strong>Enable Claude Desktop activity…</strong> and grant Accessibility access to see activity in an open chat. Windows keeps the conversation as a saved link. Live Claude Desktop activity on Mac is still awaiting an end-to-end check.</p>
+      <p>Claude Code sessions come from the local CLI’s agent list. Follow a session’s status and use <strong>Copy attach command</strong> for a background job or <strong>Copy resume command</strong> to continue in the project terminal. Review permissions in Claude Code.</p>
+    </details>
+    <details><summary>Show active sessions and control a turn</summary>
+      <p><strong>In development on Mac.</strong> Enable <strong>Automatically show active sessions</strong> to bring working and waiting sessions into the strip. They leave when idle. Your pins keep their order. Choose <strong>+</strong> to start a fresh Codex, ChatGPT or ChatGPT Work session.</p>
+      <p>On Codex, <strong>End session</strong> asks for confirmation before archiving the selected thread and removing its tile. On ChatGPT, <strong>Stop response</strong> stops the active turn in the matching desktop composer and keeps the chat available. ChatGPT approval buttons show the scope offered by the app, such as <strong>Allow this conversation</strong>.</p>
     </details>
     <details><summary>Run the Windows preview</summary>
       <p>Install Python 3.9 or later with Tkinter. From the repository root, run <code>py -3 windows\watchnotch.pyw</code>. Click the owl to expand the strip. Library search, Active filtering, desktop discovery, browser and export imports, and paged pins are available. Codex monitoring needs a running local daemon.</p>

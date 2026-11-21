@@ -43,7 +43,7 @@ section[id] { scroll-margin-top: 24px }
 .section-heading h2 { font-size: clamp(32px, 4vw, 54px) }
 video { aspect-ratio: 16/9; border-radius: 16px; background: #30251d }
 figcaption { margin-top: 10px; line-height: 1.5 }
-.chapters { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-top: 16px }
+.chapters { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 16px }
 .chapters a { border-top: 1px solid var(--line); padding: 10px 2px; line-height: 1.45 }
 .chapters a:hover, .chapters a[aria-current] { border-color: var(--accent); color: var(--accent) }
 .chapters time { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }

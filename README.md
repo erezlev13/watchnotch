@@ -28,4 +28,9 @@ Keep selected Codex and ChatGPT sessions within reach from a small desktop strip
 - **Mac features in development** include a preview of the last assistant reply seen in an open pinned ChatGPT conversation, queued text follow-ups when the desktop composer offers **Queue**, multiline drafts and one screenshot per draft. Connected Codex threads can receive the caption and image together. ChatGPT uses a clipboard handoff for images. [Watch the feature film](https://erezlev13.github.io/watchnotch/#tour)
 - **Windows source preview** runs with Python 3.9+ and Tkinter. It supports session discovery, activity, branches, account usage, Codex text replies and ChatGPT handoff. The Windows guide lists prerequisites and native verification status. [Windows guide](windows/README.md)
 
+The local-preview descriptions and film cover integration revision `177379bb8e6133ec67952ba5fddabdfc986f2358`. It also includes the following workflows.
+
+- **Claude Desktop and Claude Code on Mac and Windows.** Pin a private Claude Desktop chat link and hand off drafts with **Copy & open**. Mac Accessibility can report activity in open Claude Desktop chats. Claude Code uses the local CLI’s agent list and offers a command to attach to a background job or resume a session in its project terminal.
+- **Session controls on Mac.** Use **+** to open a new Codex, ChatGPT or ChatGPT Work composer. **Automatically show active sessions** temporarily adds working or waiting threads alongside your pins. **End session** offers to archive a Codex thread. **Stop response** stops a supported desktop ChatGPT turn and keeps the conversation available.
+
 For provider behavior, connection options and verification details, see the [Codex adapter guide](mac/Adapters/Codex/README.md) and the [ChatGPT desktop guide](mac/Adapters/ChatGPT/README.md).
