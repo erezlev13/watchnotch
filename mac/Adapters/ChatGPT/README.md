@@ -1,8 +1,10 @@
 # ChatGPT desktop
 
-A private conversation URL can be added as a session in the companion. Select the session in the companion’s picker to pin it. Its **Jump in** action checks for a matching open window or app-associated link before opening the conversation URL in the default browser. Automatic updates, results, and approval controls are unavailable for these saved links.
+Pin a conversation from the session library or paste a private ChatGPT conversation URL. The library checks the local desktop catalog for conversation IDs, titles, dates and reported activity. Recent active-turn records can surface a Work conversation before its title arrives. Pinned conversations refresh in the background. The tile can show statuses such as “Writing a response,” “Working in the background” and “A new response is ready.” The catalog supplies activity metadata only.
 
-The session library reads titles, IDs and dates from the local ChatGPT desktop catalog when it opens. **Find on this Mac** can additionally find visited conversation links in readable Safari, Chrome, Edge, Brave, Arc, Dia, Chromium, Firefox and desktop browser histories. It runs on request. For conversations missing from browser history, import a ChatGPT export ZIP or a conversations JSON file. The picker keeps titles, conversation IDs and dates. Only pinned links appear in the notch. [Export instructions](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data)
+Type a follow-up below **Jump in**. **Copy & open** places that tile’s draft on the clipboard and opens the conversation for you to paste and send. **Jump in** tries to select the chat in the running desktop app. The globe button opens its private URL in your browser.
+
+**Find on this Mac** looks for visited conversation links in readable Safari, Chrome, Edge, Brave, Arc, Dia, Chromium, Firefox and desktop browser histories on request. You can also import a ChatGPT export ZIP or conversations JSON file. The picker retains titles, IDs and dates. Live status becomes available when the matching conversation appears in the desktop activity source. [Export instructions](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data)
 
 ## Add a conversation
 
@@ -18,15 +20,7 @@ Ordinary chats and cloud Work chats sync across surfaces. A desktop-local Work t
 
 ## Verification on this Mac
 
-Tested on macOS 26.5.2 with ChatGPT desktop 26.1117.41037. The installed app is `/Applications/ChatGPT.app`, bundle identifier `com.openai.codex`. Its declared URL schemes include `codex`, `http`, and `https`. This declaration alone does not prove a route to a particular desktop task.
-
-| Capability | Chat | Work | Evidence |
-| --- | --- | --- | --- |
-| Stable identity and local title | Direct conversation URL and manual title | Same for a cloud task with a direct URL | Two distinct synthetic UUIDs with matching titles produced two records. Reimporting one with a different title updated that record only. |
-| Open source session | Direct HTTPS link | Direct HTTPS link when available | Canonical URL verified in generated snapshot. Actual private conversation reopening requires the owning account and was not exercised. |
-| Discover title, progress or result | Unverified | Unverified | Desktop Accessibility trust check returned false both in the sandbox and in the approved desktop context. |
-| Track multiple native chats across app switches | Unverified | Unverified | Saved links persist independently. Native background changes could not be observed through Accessibility. |
-| Deliver a decision to an exact request | Unavailable | Unverified | No documented external request/response mechanism identified for this surface. The adapter emits no request or decision controls. |
+Tested on macOS 26.5.2 with ChatGPT desktop 26.1117.41037. The installed app is `/Applications/ChatGPT.app`, bundle identifier `com.openai.codex`. The catalog reported that a pinned Work conversation was writing a response. Synthetic imports covered separate IDs with the same title, renames and private file permissions. **Jump in** uses macOS window and navigation metadata to identify a conversation in the running app. macOS may ask for Accessibility permission. The ChatGPT catalog does not supply message bodies or actionable approval requests.
 
 The official integration guides describe using ChatGPT to access a selected application's content, and the desktop interface for Chat and Work. Neither guide documents a third-party subscription to individual Chat or Work session events. This is a conclusion about the interfaces checked for this prototype. [Work with Apps](https://help.openai.com/en/articles/10119604-work-with-apps-on-macos) · [ChatGPT Work and Codex](https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex)
 
@@ -39,8 +33,4 @@ python3 -B -m unittest -v
 swift -module-cache-path /private/tmp/notch-chatgpt-swift-cache AXProbe.swift
 ```
 
-The two importer tests passed. They cover deduplication, renaming, independent identities, link validation, unavailable status, and private file permissions. The probe printed `Accessibility granted to this process: false` and exited with code 2. It makes no permission request. With an existing grant, it reports ChatGPT window counts and available metadata attribute names without reading titles, text, or conversation identifiers.
-
-For a native follow-up, use a test account with one synthetic Chat and one synthetic Work session. Give each a unique title, record its direct URL if available, and check the reopened session against that title. While a task is running, switch to another app and compare distinct per-session events against the source. A visible window title alone is insufficient to prove background updates. Exercise a benign Work approval only if the source exposes both a stable session ID and a stable pending request ID. Record cancellation, resolution, and duplicate delivery before enabling any external action.
-
-The adapter's current shipping decision is to support saving and opening a user-supplied conversation link. Tracking a native chat, extracting a final result, and replying to Work requests remain unverified.
+The tests exercise desktop metadata, browser and export imports, link validation, deduplication and private file permissions. The optional Accessibility probe reports the permission state and available window metadata.

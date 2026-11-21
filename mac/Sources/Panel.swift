@@ -1,13 +1,25 @@
 import SwiftUI
+import ApplicationServices
 import AppKit
 
 private let accent = Color(red: 0.66, green: 0.86, blue: 0.76)
 extension Card {
     var label: String {
         if origin == .fixture { return "Demo" }
-        if value.provider == "ChatGPT" && value.state == .unavailable && value.sessionURL != nil { return "Saved link" }
+        if value.provider == "ChatGPT" && value.state == .unavailable && value.sessionURL != nil {
+            return value.desktopChat == true ? "No signal" : "Saved link"
+        }
         return value.state == .unavailable ? "Offline" : "Connected"
     }
+    var stateName: String {
+        switch value.state {
+        case .running: return "Working"
+        case .needsInput: return "Needs input"
+        case .ready: return "Ready"
+        case .unavailable: return label
+        }
+    }
+
     var tint: Color {
         switch value.state {
         case .running: return Color.cyan
@@ -23,6 +35,7 @@ final class PanelState: ObservableObject {
     @Published var managing = false
     @Published var displayWidth: CGFloat = 1024
     @Published var rowHeight: CGFloat = 240
+    let replies = TileReplies()
     var shownSentences: [Identity: String] = [:]
 }
 
@@ -38,6 +51,10 @@ struct PanelView: View {
     let toggle: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var library = SessionLibrary()
+    private var branchParents: [String] {
+        guard panel.expanded && !panel.managing else { return [] }
+        return store.saved.pins.filter { $0.origin == .adapter && $0.provider == "Codex" }.map(\.sessionID)
+    }
     var body: some View {
         Group {
             if !panel.expanded {
@@ -81,7 +98,7 @@ struct PanelView: View {
                         ScrollView([.horizontal,.vertical],showsIndicators: false) {
                             HStack(alignment: .top,spacing: gap) {
                                 ForEach(Array(store.pinned.enumerated()), id: \.element.id) { index, card in
-                                    SessionTile(card: card, store: store, panel: panel, index: index, width: width)
+                                    SessionTile(card: card, store: store, panel: panel, index: index, width: width, branches: card.origin == .adapter && card.value.provider == "Codex" ? library.branches[card.value.sessionID] ?? [] : [])
                                         .frame(width: width)
                                 }
                             }.padding(.top,17)
@@ -107,6 +124,19 @@ struct PanelView: View {
                     }
                 }.padding(.top,3).frame(maxWidth: .infinity,maxHeight: .infinity,alignment: .top)
             }
+        }.task(id: panel.managing && panel.expanded || store.saved.pins.contains { $0.provider == "ChatGPT" && $0.origin == .adapter }) {
+            guard panel.managing && panel.expanded || store.saved.pins.contains(where: { $0.provider == "ChatGPT" && $0.origin == .adapter }) else { return }
+            while !Task.isCancelled {
+                await library.refreshChats(store: store)
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+            }
+        }.task(id: branchParents) {
+            let parents = branchParents
+            repeat {
+                await library.refreshBranches(for: parents)
+                if parents.isEmpty || Task.isCancelled { return }
+                do { try await Task.sleep(nanoseconds: 12_000_000_000) } catch { return }
+            } while !Task.isCancelled
         }.buttonStyle(.plain).foregroundStyle(Color.white)
             .environment(\.colorScheme,.dark)
     }
@@ -119,6 +149,7 @@ private struct SessionTile: View {
     let panel: PanelState
     let index: Int
     let width: CGFloat
+    let branches: [LibraryItem]
     @Environment(\.accessibilityReduceTransparency) private var solid
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var entered = false
@@ -126,14 +157,6 @@ private struct SessionTile: View {
     @State private var receipt: String?
     @State private var hovered = false
 
-    private var stateName: String {
-        switch card.value.state {
-        case .running: return "Working"
-        case .needsInput: return "Needs input"
-        case .ready: return "Ready"
-        case .unavailable: return card.label == "Saved link" ? "Saved link" : "Offline"
-        }
-    }
 
     @State private var usage: [UsageWindow]?
     @State private var showingDetails = false
@@ -146,6 +169,9 @@ private struct SessionTile: View {
         Task { @MainActor in
             defer { opening = false }
             if await route.open(browserOnly: browserOnly) { panel.expanded = false }
+            else if card.value.provider == "ChatGPT" && !browserOnly {
+                store.notice = AXIsProcessTrusted() ? "This chat isn’t visible in ChatGPT. Use Open in browser on the tile." : "Allow watchnotch in System Settings → Privacy & Security → Accessibility, then try Jump in again."
+            }
             else { store.notice = "Could not open " + card.value.title + (route.web == nil ? ". Add its web link in Manage sessions if one exists." : ". Check the session link and try again.") }
         }
     }
@@ -193,7 +219,7 @@ private struct SessionTile: View {
                     }
                 }
                 ActivityMark(state: card.value.state,tint: card.tint)
-                Text(stateName).foregroundStyle(card.tint)
+                Text(card.stateName).foregroundStyle(card.tint)
             }.font(.system(size: 10.5,weight: .medium))
             VStack(alignment: .leading,spacing: 5) {
                 Text(card.value.title).font(.system(size: 17,weight: .semibold)).lineLimit(2)
@@ -235,15 +261,43 @@ private struct SessionTile: View {
                 }
             }
             if let jump {
-                Button { navigate(jump) } label: {
-                    Label("Jump in",systemImage: "arrow.up.forward.app").font(.caption.weight(.semibold))
-                        .padding(.horizontal,9).padding(.vertical,5).background(.white.opacity(0.12),in: Capsule())
-                }.disabled(opening).help("Return to " + card.value.title)
-                    .accessibilityLabel("Jump in to " + card.value.title)
-                    .contextMenu {
-                        if jump.web != nil { Button("Open in browser") { navigate(jump,browserOnly: true) } }
+                HStack {
+                    Button { navigate(jump) } label: {
+                        Label("Jump in", systemImage: "arrow.up.forward.app").font(.caption.weight(.semibold))
+                            .padding(.horizontal, 9).padding(.vertical, 5).background(.white.opacity(0.12), in: Capsule())
+                    }.disabled(opening).help("Return to " + card.value.title)
+                        .accessibilityLabel("Jump in to " + card.value.title)
+                        .contextMenu {
+                            if jump.web != nil { Button("Open in browser") { navigate(jump, browserOnly: true) } }
+                        }
+                    if card.value.provider == "ChatGPT" {
+                        Button { navigate(jump, browserOnly: true) } label: { Image(systemName: "globe") }
+                            .help("Open in browser").accessibilityLabel("Open in browser")
                     }
+                }
             }
+            if !branches.isEmpty {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 6) {
+                        ForEach(branches) { branch in
+                            let value = Snapshot(provider: "Codex", sessionID: branch.sessionID, title: branch.title, sentence: "", state: branch.state ?? .unavailable, updatedAt: Date(timeIntervalSince1970: branch.updated))
+                            let child = Card(value: value, origin: .adapter)
+                            Button {
+                                if let route = SessionJump(card: child) { navigate(route) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label((branch.branchKind ?? "Branch") + " · " + child.stateName, systemImage: "arrow.triangle.branch")
+                                        .font(.caption2).foregroundStyle(child.tint)
+                                    Text(branch.title).font(.caption.weight(.semibold)).lineLimit(1)
+                                }.padding(.horizontal, 8).padding(.vertical, 5)
+                                    .frame(maxWidth: 152, alignment: .leading)
+                                    .background(child.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                            }.help("Open " + branch.title).accessibilityLabel("Open " + (branch.branchKind ?? "branch") + " " + branch.title)
+                        }
+                    }
+                }
+            }
+            TileReply(card: card, jump: jump, replies: panel.replies)
         }.padding(14).frame(maxWidth: .infinity,alignment: .leading)
             .background {
                 shape.fill(Color(red: 0.042,green: 0.054,blue: 0.068).opacity(solid ? 1 : 0.82))
@@ -328,42 +382,48 @@ private struct TypedStatus: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible = ""
     @State private var typing = false
+    @State private var entrance: CGFloat = 1
 
     var body: some View {
         // Reserve the final sentence's space so typing never shifts the decision buttons.
         Text(sentence).hidden().accessibilityHidden(true)
             .overlay(alignment: .topLeading) {
                 Text("\(reduceMotion ? sentence : visible)\(Text(typing && !reduceMotion ? "▏" : "").foregroundColor(accent))").foregroundStyle(.white)
+                    .opacity(reduceMotion ? 1 : 0.35 + 0.65 * entrance)
+                    .offset(y: reduceMotion ? 0 : 5 * (1 - entrance))
                     .accessibilityHidden(true)
             }
             .font(.system(size: 13,weight: .medium,design: .monospaced))
-            .lineLimit(1)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .help(sentence)
+            .contentShape(Rectangle())
+            .onTapGesture { visible = sentence; typing = false }
+            .help(typing ? "Click to read the full update now" : sentence)
             .accessibilityElement(children: .ignore)
             .accessibilityHidden(false)
             .accessibilityLabel(sentence)
+            .accessibilityAction(named: "Reveal full update") { visible = sentence; typing = false }
             .task(id: sentence) {
                 if reduceMotion || panel.shownSentences[id] == sentence {
                     visible = sentence
+                    entrance = 1
                     typing = false
                     return
                 }
                 panel.shownSentences[id] = sentence
                 visible = ""
+                entrance = 0
                 typing = true
-                let characters = Array(sentence)
-                let batch = max(1,(characters.count + 49) / 50)
-                var end = 0
-                while end < characters.count {
-                    guard !Task.isCancelled else { return }
-                    let next = min(characters.count,end + batch)
-                    visible.append(contentsOf: characters[end..<next])
-                    end = next
-                    if end < characters.count {
-                        do { try await Task.sleep(nanoseconds: 20_000_000) }
-                        catch { return }
-                    }
+                withAnimation(.easeOut(duration: 0.65)) { entrance = 1 }
+                for character in sentence {
+                    guard !Task.isCancelled, typing else { return }
+                    visible.append(character)
+                    let pause: UInt64
+                    if ".!?".contains(character) { pause = 340 }
+                    else if ",:—;".contains(character) { pause = 190 }
+                    else { pause = character.isWhitespace ? 64 : 43 }
+                    do { try await Task.sleep(nanoseconds: pause * 1_000_000) } catch { return }
                 }
                 typing = false
             }

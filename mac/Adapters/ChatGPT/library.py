@@ -90,7 +90,7 @@ def from_export(path):
                 yield from conversations(stream)
 
 
-def desktop_items(directory):
+def desktop_items(directory, launched=None):
     path = directory / "sqlite" / "codex.db"
     if not path.is_file():
         return
@@ -100,18 +100,46 @@ def desktop_items(directory):
         db.execute("PRAGMA trusted_schema=OFF")
         columns = {row[1] for row in db.execute("PRAGMA table_info(local_thread_catalog)")}
         activity_column = "chatgpt_async_status" if "chatgpt_async_status" in columns else "NULL"
-        query = f"""SELECT thread_id, display_title, source_updated_at, {activity_column}
-                   FROM local_thread_catalog
-                   WHERE source_kind = 'chatgpt' AND missing_candidate = 0"""
-        for identifier, title, updated, async_status in db.execute(query):
-            normalized = item(identifier, title, updated)
+        origin = "conversation_origin" if "conversation_origin" in columns else "NULL"
+        recency = "source_recency_at" if "source_recency_at" in columns else "NULL"
+        created = "source_created_at" if "source_created_at" in columns else "NULL"
+        query = f"""SELECT thread_id, display_title, source_updated_at, {activity_column}, {origin}, {recency}, {created}
+                    FROM local_thread_catalog WHERE source_kind = 'chatgpt' AND missing_candidate = 0"""
+        chats = {}
+        for identifier, title, updated, async_status, surface, recent, started in db.execute(query):
+            date = max((v for v in (updated, recent, started) if isinstance(v, (int, float))), default=0)
+            normalized = item(identifier, title, date)
             if normalized:
-                # The desktop client treats 1, streaming (3), and realtime (5–7) as running.
-                # 4 means unread. A missing value is common and carries no activity signal.
-                if async_status in (1, 3, 5, 6, 7):
-                    normalized["state"] = "running"
-                yield normalized
+                if surface == "tpp":
+                    normalized["work"] = True
+                descriptions = {1: "Working on the request", 3: "Writing a response",
+                                4: "A new response is ready", 5: "Working in ChatGPT",
+                                6: "Processing the current turn", 7: "Working in the background"}
+                if async_status in descriptions:
+                    normalized["state"] = "ready" if async_status == 4 else "running"
+                    normalized["activityText"] = descriptions[async_status]
+                chats[normalized["sessionID"]] = normalized
 
+        # Work can register an active turn before its titled conversation is indexed.
+        # Limit this temporary signal to the desktop profile and accounts in its ChatGPT catalog.
+        tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if launched is not None and {"active_chat_turns", "local_thread_catalog_sync_state"} <= tables:
+            profile = str(Path.home() / "Library/Application Support/Codex")
+            for identifier, observed in db.execute("""
+                SELECT a.thread_id, MAX(a.observed_at_ms) FROM active_chat_turns a
+                JOIN local_thread_catalog_sync_state s ON s.host_id = 'chatgpt:' || a.account_id || ':' || a.user_id
+                WHERE a.profile = ? AND a.observed_at_ms >= ? GROUP BY a.thread_id""",
+                (profile, int(launched * 1000))):
+                pending = item(identifier, None, observed / 1000)
+                if pending:
+                    key = pending["sessionID"]
+                    pending["title"] = "New ChatGPT conversation · " + key[:8]
+                    row = chats.setdefault(key, pending)
+                    row["updated"] = max(row["updated"], pending["updated"])
+                    row["state"] = "running"
+                    if row.get("activityText") not in ("Writing a response", "Working in the background"):
+                        row["activityText"] = "Working on the current turn"
+        yield from chats.values()
 
 def browser_items(home):
     support = home / "Library/Application Support"
@@ -151,9 +179,10 @@ def main():
     mode.add_argument("--desktop", action="store_true")
     mode.add_argument("--browser", action="store_true")
     mode.add_argument("--import-file", type=Path)
+    parser.add_argument("--launched", type=float, help="Start time of the running desktop app")
     args = parser.parse_args()
     if args.desktop:
-        rows = desktop_items(Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex"))
+        rows = desktop_items(Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex"), args.launched)
     elif args.browser:
         rows = browser_items(Path.home())
     else:

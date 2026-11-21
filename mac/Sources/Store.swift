@@ -8,6 +8,8 @@ final class Store: ObservableObject {
     @Published var notice: String?
     @Published var pinLimit: Int
     @Published private(set) var importedChats: [LibraryItem] = []
+    private var uniqueChatTitles = Set<String>()
+    private var chatActivity: [String: LibraryItem] = [:]
     private let root: URL
     let directory: URL
     private var timer: AnyCancellable?
@@ -268,6 +270,26 @@ final class Store: ObservableObject {
         return errno == EWOULDBLOCK
     }
 
+    func updateChatActivity(_ rows: [LibraryItem]) {
+        let pinnedChats = Set(saved.pins.filter { $0.provider == "ChatGPT" && $0.origin == .adapter }.map(\.sessionID))
+        uniqueChatTitles = Set(Dictionary(grouping: rows, by: \.title).compactMap { $0.value.count == 1 ? $0.key : nil })
+        var observed: [String: LibraryItem] = [:]
+        for var row in rows where pinnedChats.contains(row.sessionID) {
+            if row.state == nil, let previous = chatActivity[row.sessionID] {
+                // A normal read can clear the desktop's unread flag. A missing flag
+                // after streaming establishes only that live activity is no longer reported.
+                switch previous.state {
+                case .ready: row.activityText = "Last response is ready"
+                case .running: row.activityText = "ChatGPT stopped reporting activity"
+                default: row.activityText = previous.activityText
+                }
+            }
+            observed[row.sessionID] = row
+        }
+        chatActivity = observed
+        refreshAdapters(now: Date())
+    }
+
     private func refreshAdapters(now: Date) {
         let before = pinned.filter { $0.origin == .adapter }.map(\.value)
         let files = (try? fs.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
@@ -282,7 +304,26 @@ final class Store: ObservableObject {
                 // The bundled adapters only report status and never issue approvals or results.
                 snapshot.request = nil
                 snapshot.resultURL = nil
-                if snapshot.provider == "ChatGPT" || !hasCodexWriter(file) { snapshot.state = .unavailable }
+                if snapshot.provider == "ChatGPT" {
+                    snapshot.state = .unavailable
+                    snapshot.nativeChatTitle = nil
+                    snapshot.desktopChat = nil
+                    if let row = chatActivity[snapshot.sessionID] {
+                        snapshot.desktopChat = true
+                        snapshot.title = row.title
+                        snapshot.nativeChatTitle = uniqueChatTitles.contains(row.title) ? row.title : nil
+                        snapshot.state = row.state ?? .unavailable
+                        snapshot.sentence = row.activityText ?? "No current activity reported"
+                        let id = Identity(origin: .adapter, provider: "ChatGPT", sessionID: snapshot.sessionID)
+                        if let old = cards[id]?.value, old.state == snapshot.state && old.sentence == snapshot.sentence {
+                            snapshot.updatedAt = old.updatedAt
+                        } else if cards[id]?.value.desktopChat == true {
+                            snapshot.updatedAt = now
+                        } else {
+                            snapshot.updatedAt = row.updated > 0 ? Date(timeIntervalSince1970: row.updated) : now
+                        }
+                    }
+                } else if !hasCodexWriter(file) { snapshot.state = .unavailable }
             }
             if snapshot.state != .needsInput { snapshot.request = nil }
             if let req = snapshot.request {

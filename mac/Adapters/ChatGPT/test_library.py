@@ -47,6 +47,44 @@ class LibraryTests(unittest.TestCase):
             self.assertEqual({r["title"] for r in desktop_items(Path(root)) if r.get("state") == "running"},
                              {"1", "3", "5", "6", "7"})
 
+    def test_active_turn_appears_before_catalog_and_keeps_identity_when_indexed(self):
+        profile = str(Path.home() / "Library/Application Support/Codex")
+        active_id = "11111111-1111-4111-8111-111111111111"
+        with TemporaryDirectory() as root:
+            folder = Path(root) / "sqlite"
+            folder.mkdir()
+            with sqlite3.connect(folder / "codex.db") as db:
+                db.execute("CREATE TABLE local_thread_catalog(thread_id,display_title,source_updated_at,source_kind,missing_candidate,chatgpt_async_status,conversation_origin,source_created_at,source_recency_at)")
+                db.execute("CREATE TABLE local_thread_catalog_sync_state(host_id)")
+                db.execute("INSERT INTO local_thread_catalog_sync_state VALUES('chatgpt:a:u')")
+                db.execute("CREATE TABLE active_chat_turns(profile,account_id,user_id,thread_id,observed_at_ms)")
+                db.executemany("INSERT INTO active_chat_turns VALUES(?,?,?,?,?)", [
+                    (profile, "a", "u", active_id, 101000),
+                    (profile, "a", "u", "22222222-2222-4222-8222-222222222222", 99000),
+                    (profile, "other", "u", "33333333-3333-4333-8333-333333333333", 101000),
+                    ("other-profile", "a", "u", "44444444-4444-4444-8444-444444444444", 101000),
+                ])
+                db.commit()
+                self.assertEqual(list(desktop_items(Path(root))), [])
+                provisional, = desktop_items(Path(root), launched=100)
+                self.assertEqual((provisional["sessionID"], provisional["state"], provisional["updated"]),
+                                 (active_id, "running", 101))
+                db.execute("INSERT INTO local_thread_catalog VALUES(?, 'A Work chat', 90, 'chatgpt', 0, 3, 'tpp', 88, 110)", (active_id,))
+                db.commit()
+                streamed, = desktop_items(Path(root), launched=100)
+                self.assertEqual((streamed["sessionID"], streamed["title"], streamed["updated"], streamed["work"]),
+                                 (active_id, "A Work chat", 110, True))
+                self.assertEqual(streamed["activityText"], "Writing a response")
+                db.execute("DELETE FROM active_chat_turns")
+                db.execute("UPDATE local_thread_catalog SET chatgpt_async_status=4")
+                db.commit()
+                unread, = desktop_items(Path(root), launched=100)
+                self.assertEqual((unread["state"], unread["activityText"]), ("ready", "A new response is ready"))
+                db.execute("UPDATE local_thread_catalog SET chatgpt_async_status=NULL")
+                db.commit()
+                cleared, = desktop_items(Path(root), launched=100)
+                self.assertNotIn("state", cleared)
+
     def test_browser_profiles_and_private_links(self):
         with TemporaryDirectory() as root:
             path = Path(root) / "Library/Application Support/Google/Chrome/Profile 3/History"

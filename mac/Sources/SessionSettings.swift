@@ -20,6 +20,7 @@ final class SessionLibrary: ObservableObject {
     @Published private(set) var desktopChats: [LibraryItem] = []
     @Published private(set) var local: [LibraryItem] = []
     @Published private(set) var activity: [Identity: SessionState] = [:]
+    @Published private(set) var branches: [String: [LibraryItem]] = [:]
     @Published private(set) var loading = false
     @Published private(set) var readingChats = false
     @Published var message: String?
@@ -51,19 +52,26 @@ final class SessionLibrary: ObservableObject {
         }.value
     }
 
+    func refreshChats(store: Store) async {
+        let launch = NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").compactMap(\.launchDate).max()
+        let args = ["--desktop"] + (launch.map { ["--launched", String($0.timeIntervalSince1970)] } ?? [])
+        do {
+            let page = try await Self.read("library",arguments: args)
+            try Task.checkCancellation()
+            desktopChats = page.items
+            store.updateChatActivity(page.items)
+        } catch is CancellationError {
+        } catch {
+            desktopChats = desktopChats.map { var row = $0; row.state = nil; return row }
+            store.updateChatActivity([])
+            message = "Couldn’t read the ChatGPT desktop catalog. Use Find on this Mac or import an export."
+        }
+    }
+
     func refresh() async {
         guard !loading else { return }
         loading = true
         defer { loading = false }
-        do {
-            let page = try await Self.read("library",arguments: ["--desktop"])
-            try Task.checkCancellation()
-            desktopChats = page.items
-        } catch is CancellationError {
-        } catch {
-            desktopChats = desktopChats.map { var row = $0; row.state = nil; return row }
-            message = "Couldn’t read the ChatGPT desktop catalog. Use Find on this Mac or import an export."
-        }
         var cursor: String?
         var cursors = Set<String>()
         var seen = Set<Identity>()
@@ -101,13 +109,17 @@ final class SessionLibrary: ObservableObject {
             } while cursor.map({ seen.insert($0).inserted }) == true
         } catch is CancellationError { return }
         catch { current = [:] }
-        let chats = try? await Self.read("library", arguments: ["--desktop"])
         guard !Task.isCancelled, !loading else { return }
         let existing = Set(local.map(\.id))
         local.append(contentsOf: loadedRows.filter { !existing.contains($0.id) })
         activity = current
-        if let chats { desktopChats = chats.items }
-        else { desktopChats = desktopChats.map { var row = $0; row.state = nil; return row } }
+    }
+
+    func refreshBranches(for parents: [String]) async {
+        guard !parents.isEmpty else { branches = [:]; return }
+        let page = try? await Self.read("monitor", arguments: ["--branches"] + parents)
+        guard !Task.isCancelled else { return }
+        branches = Dictionary(grouping: (page?.items ?? []).filter { $0.parentID != nil }, by: { $0.parentID ?? "" })
     }
 
     func findChats(file: URL?, store: Store) async {
@@ -171,7 +183,11 @@ struct SessionSettings: View {
         }
         if section == "Active" { items = items.filter { $0.state == .running || $0.state == .needsInput } }
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return term.isEmpty ? items : items.filter { $0.title.localizedCaseInsensitiveContains(term) || $0.provider.localizedCaseInsensitiveContains(term) || $0.sessionID.localizedCaseInsensitiveContains(term) }
+        if let (id, _) = Format.chatLink(term), ["All", "ChatGPT"].contains(section) {
+            return [items.first { $0.provider == "ChatGPT" && $0.sessionID == id } ??
+                LibraryItem(provider: "ChatGPT", sessionID: id, title: "ChatGPT conversation · " + String(id.prefix(8)), updated: 0)]
+        }
+        return term.isEmpty ? items : items.filter { ($0.work == true && "ChatGPT Work".localizedCaseInsensitiveContains(term)) || $0.title.localizedCaseInsensitiveContains(term) || $0.provider.localizedCaseInsensitiveContains(term) || $0.sessionID.localizedCaseInsensitiveContains(term) }
     }
 
     private var emptyMessage: String {
@@ -204,13 +220,13 @@ struct SessionSettings: View {
                     Text("\(library.desktopChats.count) desktop chats · \(store.saved.pins.count)/\(store.pinLimit) pinned").font(.caption).foregroundStyle(mint)
                 }
                 Spacer()
-                Button { Task { await library.refresh() } } label: {
+                Button { Task { await library.refreshChats(store: store); await library.refresh() } } label: {
                     Image(systemName: "arrow.clockwise").frame(width: 30, height: 30).background(.white.opacity(0.09), in: Circle())
                 }.disabled(library.loading).help("Refresh local sessions").accessibilityLabel("Refresh local sessions")
             }
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(mint)
-                TextField("Find a session", text: $query).textFieldStyle(.plain)
+                TextField("Search sessions or paste a conversation link", text: $query).textFieldStyle(.plain)
                 if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("Clear search") }
             }.padding(10).background(.black.opacity(0.26), in: RoundedRectangle(cornerRadius: 10))
                 .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(mint.opacity(0.26)) }
@@ -253,11 +269,11 @@ struct SessionSettings: View {
                                 .frame(width: 32, height: 32).background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.title).font(.callout.weight(.medium)).lineLimit(1).help(row.title)
-                                Text(key.origin == .fixture ? "\(row.provider) · Demo" : (row.provider == "Codex" ? "Codex · Local session" : "ChatGPT · Conversation link")).font(.caption2).foregroundStyle(.secondary)
+                                Text(key.origin == .fixture ? "\(row.provider) · Demo" : (row.provider == "Codex" ? "Codex · Local session" : (row.work == true ? "ChatGPT Work" : "ChatGPT · Conversation link"))).font(.caption2).foregroundStyle(.secondary)
                             }
                             Spacer()
                             if let status = row.state, status != .unavailable {
-                                let label = status == .needsInput ? "Needs input" : (status == .running ? "Active" : "Idle")
+                                let label = status == .needsInput ? "Needs input" : (status == .running ? "Active" : (row.provider == "ChatGPT" ? "New reply" : "Idle"))
                                 let color = status == .needsInput ? Color.orange : (status == .running ? mint : .secondary)
                                 Label(label, systemImage: status == .running ? "waveform" : (status == .needsInput ? "hand.raised.fill" : "pause.circle"))
                                     .font(.caption2.weight(.semibold)).foregroundStyle(color)
