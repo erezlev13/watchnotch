@@ -87,7 +87,7 @@ def from_export(path):
                 yield from conversations(stream)
 
 
-def desktop_items(directory):
+def desktop_items(directory, launched=None, profiles=()):
     path = directory / "sqlite" / "codex.db"
     if not path.is_file():
         return
@@ -109,14 +109,33 @@ def desktop_items(directory):
             if normalized:
                 if surface == "tpp":
                     normalized["work"] = True
-                descriptions = {1: "Working on the request", 3: "Writing a response",
-                                4: "A new response is ready", 5: "Working in ChatGPT",
-                                6: "Processing the current turn", 7: "Working in the background"}
-                if async_status in descriptions:
+                descriptions = {1: "ChatGPT is working on your request.", 3: "ChatGPT is writing a reply.",
+                                4: "A new reply is ready to read.", 5: "Your conversation is active.",
+                                6: "ChatGPT is working on your request.", 7: "Work is continuing in the background."}
+                if launched is not None and async_status in descriptions:
                     normalized["state"] = "ready" if async_status == 4 else "running"
                     normalized["activityText"] = descriptions[async_status]
                 chats[normalized["sessionID"]] = normalized
 
+        # Work can register an active turn before its titled conversation is indexed.
+        # Limit this temporary signal to the desktop profile and accounts in its ChatGPT catalog.
+        tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if launched is not None and profiles and {"active_chat_turns", "local_thread_catalog_sync_state"} <= tables:
+            placeholders = ", ".join("?" for _ in profiles)
+            for identifier, observed in db.execute(f"""
+                SELECT a.thread_id, MAX(a.observed_at_ms) FROM active_chat_turns a
+                JOIN local_thread_catalog_sync_state s ON s.host_id = 'chatgpt:' || a.account_id || ':' || a.user_id
+                WHERE a.profile COLLATE NOCASE IN ({placeholders}) AND a.observed_at_ms >= ? GROUP BY a.thread_id""",
+                (*profiles, int(launched * 1000))):
+                pending = item(identifier, None, observed / 1000)
+                if pending:
+                    key = pending["sessionID"]
+                    pending["title"] = "New ChatGPT conversation · " + key[:8]
+                    row = chats.setdefault(key, pending)
+                    row["updated"] = max(row["updated"], pending["updated"])
+                    if row.get("state") != "running":
+                        row["activityText"] = "ChatGPT is working on your request."
+                    row["state"] = "running"
         yield from chats.values()
 
 

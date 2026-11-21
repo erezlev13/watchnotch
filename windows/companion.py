@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from adapters.codex_client import Client, branch_items, library_page, read_snapshot, send_reply
+from adapters import desktop
 from adapters.library import desktop_items
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shared"))
@@ -183,15 +184,24 @@ def codex_library(loaded=False):
 
 def desktop_catalog():
     home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
-    return {("ChatGPT", row["sessionID"]): row for row in desktop_items(home)}
+    launched = desktop.launch_time()
+    profiles = desktop.profile_paths() if launched is not None else ()
+    rows = {}
+    for row in desktop_items(home, launched, profiles):
+        row["connected"] = launched is not None
+        if launched is None:
+            row.pop("state", None)
+            row.pop("activityText", None)
+        rows[("ChatGPT", row["sessionID"])] = row
+    return rows
 
 
-def branches_for(parents):
+def branches_for(parents, include_forks):
     try:
         with connection() as server:
-            return branch_items(server, parents)
+            return branch_items(server, parents, include_forks)
     except (OSError, RuntimeError, ValueError):
-        return []
+        return None
 
 
 def reply(pin, text):

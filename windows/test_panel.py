@@ -61,6 +61,31 @@ class PanelTests(unittest.TestCase):
             finally:
                 root.destroy()
 
+    def test_chat_monitor_goes_quiet_disconnects_and_recovers(self):
+        chat = Session("ChatGPT", "22222222-2222-4222-8222-222222222222", "Work")
+        row = dict(provider=chat.provider, sessionID=chat.sessionID, title=chat.title, updated=10, work=True)
+        with TemporaryDirectory() as tmp:
+            root = tk.Tk()
+            try:
+                panel = Panel(root, Path(tmp) / "library.json")
+                panel.library.pins = [chat]
+                def complete(_name, read, display):
+                    display(read())
+                with patch.object(panel, "job", side_effect=complete), patch("panel.desktop_catalog") as catalog:
+                    for changes, state in [
+                        ({"connected": True, "state": "running", "activityText": "Writing a response"}, "running"),
+                        ({"connected": True}, "monitoring"), ({"connected": False}, "offline"),
+                        ({"connected": True, "state": "ready", "activityText": "A new response is ready"}, "ready"),
+                    ]:
+                        catalog.return_value = {chat.key: dict(row, **changes)}
+                        panel.desktop()
+                        self.assertEqual(panel.snapshots[chat.key]["state"], state)
+                    catalog.side_effect = OSError("catalog unavailable")
+                    panel.desktop()
+                    self.assertEqual(panel.snapshots[chat.key]["state"], "offline")
+            finally:
+                root.destroy()
+
     def test_open_library_pin_collapse_reopen_and_remove(self):
         with TemporaryDirectory() as tmp, patch.object(Panel, "discover"):
             root = tk.Tk()

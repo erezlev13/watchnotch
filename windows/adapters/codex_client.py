@@ -1,4 +1,6 @@
-"""Read-only Codex App Server protocol, replies and progress for the Windows companion."""
+"""Codex App Server connection, replies and progress for the Windows companion."""
+from contextlib import closing
+import sqlite3
 import base64
 import hashlib
 import json
@@ -120,90 +122,107 @@ def short_text(value, limit=148):
     return text
 
 
-# Prefer a concrete clause over a greeting, an acknowledgement or a Markdown heading.
-ACK = r"(?:yes|no|ok(?:ay)?|sure|absolutely|certainly|done|great|got it|of course|you're right|good (?:question|point)|thanks(?: for (?:asking|the context))?)"
+# Pick one complete, user-visible thought. A tool result, a prompt, or a code excerpt
+# is never a source for prose on the tile.
+ACK = r"(?:yes|no|ok(?:ay)?|sure|absolutely|certainly|done|great|got it|of course|you['’]re right|good (?:question|point)|thanks(?: for (?:asking|the context))?)"
+FILLER = re.compile(r"(?:summary|result|what changed|here['’]s (?:the gist|what (?:I|we) found)|(?:let me|I['’]ll) (?:check|take a look|look into (?:it|that))|(?:I['’]m |I am )?(?:working on (?:it|that)|on it)|more (?:details?|information)(?: follows?)?|here you go)[.!:]?", re.I)
+IMPLEMENTATION = re.compile(
+    r"(?:`|(?:^|\s)[~/][^\s]+|\b[\w-]+\.(?:py|swift|tsx?|jsx?|json|ya?ml|sh|sql|rs|cpp)\b|"
+    r"\b\w+_\w+\b|\b[a-z][a-z0-9]+[A-Z][a-z]\w*\b|\w+\(\)|"
+    r"\b(?i:git (?:diff|status|push)|shlex|stdout|stderr|RPC|JSONL|SQLite|tool call)\b)")
+MILESTONE = re.compile(r"\b(?:you can|you['’]ll|now|ready|works?|fixed|restored|available|finished|complete[d]?|verified|confirmed|passed|resolved|found|needs?|waiting|blocked|still|depends on|couldn['’]t|failed|missing)\b", re.I)
 
 
 def message_gist(value):
     visible = re.sub(r"```.*?(?:```|$)", " ", value or "", flags=re.S)
+    best, best_rank = "", -1
     for raw in visible.splitlines():
         line = re.sub(r"^\s*(?:[-+*•]\s+|\d+[.)]\s+)", "", raw).strip()
         if not line or line.startswith(("#", ">")) or line.endswith(":"):
             continue
+        # Link labels can describe a result; their targets do not belong in the summary.
+        line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
         for clause in re.split(r"(?<=[.!?])\s+", line):
-            clause = short_text(clause, None)
-            clause = re.sub(r"^" + ACK + r"(?:\s*[,!:—–-]\s*|[.!?]*$)", "", clause, flags=re.I)
-            preamble = r"(?:summary|result|what changed|here.s (?:the gist|what (?:I|we) found)|(?:let me|I.ll) (?:check|take a look|look into (?:it|that))|(?:I.m |I am )?(?:working on (?:it|that)|on it))"
-            if not clause or re.fullmatch(preamble + r"[.!:]?", clause, re.I):
+            if IMPLEMENTATION.search(clause) or re.search(r"https?://|(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{10,}", clause, re.I):
                 continue
-            clause = re.sub(r"^(?:I(?:’|')m (?:currently )?|I am (?:currently )?)(?=\w+ing\b)", "", clause, flags=re.I)
-            if len(clause) <= 360:
-                return clause[:1].upper() + clause[1:]
-            # Prefer a complete short sentence or a structured activity to a chopped paragraph.
-    return ""
+            clause = short_text(clause, None)
+            if re.fullmatch(ACK + r"[.!?]*", clause, re.I):
+                continue
+            clause = re.sub(r"^(?!no\b)" + ACK + r"\s*[,!:—–-]\s*", "", clause, flags=re.I)
+            if (len(clause.split()) < 3 or len(clause) > 360 or FILLER.fullmatch(clause)
+                    or re.match(r"^(?:if you (?:want|like)|would you like me to)\b", clause, re.I)):
+                continue
+            sentence = clause[:1].upper() + clause[1:]
+            if re.search(r"\b(?:you can now|you can once again|you can already|is now|are now|now (?:works?|shows?|stays?|keeps?)|before (?:I|we|work) can continue|waiting for your|still blocked|ready to (?:use|open|review|try))\b", sentence, re.I):
+                rank = 2
+            else:
+                rank = int(bool(MILESTONE.search(sentence)))
+            if rank > best_rank:
+                best, best_rank = sentence, rank
+    return best
 
 
 def command_activity(item):
-    status = item.get("status")
-    if status not in ("inProgress", "completed", "failed", "declined"):
-        return ""
-    active = status == "inProgress"
-    if status == "declined":
-        return "Command declined"
-    if status == "failed" or (status == "completed" and item.get("exitCode") not in (None, 0)):
-        return "Command failed"
-    actions = item.get("commandActions") or []
-    for action in actions:
-        name = Path(action.get("path") or action.get("name") or "").name
-        name = short_text(name, None)
-        if len(name) > 100:
-            name = "project files"
-        if action.get("type") == "read" and name:
-            return ("Reading " if active else "Read ") + name
-        if action.get("type") == "listFiles" and name:
-            return ("Listing files in " if active else "Listed files in ") + name
-        if action.get("type") == "search" and name:
-            return ("Searching " if active else "Searched ") + name
+    """Return whether a signal deserves priority over a routine step, and its sentence."""
+    state = item.get("status")
+    if state not in ("inProgress", "completed", "failed", "declined"):
+        return False, ""
+    if state == "declined":
+        return True, "This step was skipped because permission was declined"
     try:
         parts = shlex.split(item.get("command") or "")
         if len(parts) >= 3 and Path(parts[0]).name in ("sh", "bash", "zsh") and "c" in parts[1]:
             parts = shlex.split(parts[2])
     except ValueError:
-        return ""
-    # Match command names and recognized subcommands. Arguments and output stay off the tile.
-    words = [Path(p).name for p in parts[:4]]
-    if any(w in ("test.sh", "pytest", "unittest", "test", "verify.py") for w in words):
-        return "Running tests" if active else ("Tests passed" if status == "completed" and item.get("exitCode") == 0 else "The test command stopped")
-    if any(w in ("build.sh", "swiftc", "xcodebuild") for w in words):
-        return "Building the app" if active else ("The build succeeded" if status == "completed" and item.get("exitCode") == 0 else "The build stopped")
-    if words[:2] == ["git", "diff"] or words[:2] == ["git", "status"]:
-        return "Checking repository changes" if active else "Checked repository changes"
-    return ""
+        parts = []
+    program = Path(parts[0]).name if parts else ""
+    args = parts[1:]
+    # Only recognize the program doing the work; arbitrary arguments may mention a test or a build.
+    check = (program in ("pytest", "test.sh", "verify.py") or
+             (program in ("python", "python3") and args[:2] in (["-m", "unittest"], ["-m", "pytest"])) or
+             (program in ("npm", "swift", "cargo", "go", "yarn", "pnpm") and args[:1] == ["test"]))
+    build = (program in ("build.sh", "swiftc", "xcodebuild") or
+             (program in ("swift", "cargo") and args[:1] == ["build"]) or
+             (program == "npm" and args[:2] == ["run", "build"]))
+    failed = state == "failed" or (state == "completed" and item.get("exitCode") not in (None, 0))
+    if check or build:
+        if failed:
+            return True, "A check found a problem with the changes" if check else "The new version could not be built"
+        if state == "inProgress":
+            return True, "I’m checking whether the changes work as expected" if check else "I’m preparing a new version"
+        if item.get("exitCode") == 0:
+            return True, "The changes passed this check" if check else "The new version built successfully"
+        return True, "The check has ended" if check else "The build step has ended"
+    if failed:
+        return True, "One step could not finish"
+    if program == "git" and args[:1] in (["diff"], ["status"]):
+        return False, "I’m reviewing what changed" if state == "inProgress" else "I reviewed the latest changes"
+    if any(a.get("type") in ("read", "listFiles", "search") for a in item.get("commandActions") or []):
+        return False, "I’m looking through the project for relevant details" if state == "inProgress" else "I checked the project for relevant details"
+    return False, ""
 
 
-def activity(item):
+def ranked_activity(item):
     kind = item.get("type")
     if kind == "agentMessage":
         moderation = item.get("moderation") or {}
         if moderation.get("moderated") or (moderation.get("display") or {}).get("mode") in ("block", "hide"):
-            return ""
-        return message_gist(item.get("text"))
+            return False, ""
+        return True, message_gist(item.get("text"))
     if kind == "commandExecution":
         return command_activity(item)
-    if kind == "fileChange":
-        names = [short_text(Path(c["path"]).name, None) for c in item.get("changes", []) if c.get("path")]
-        if names:
-            target = names[0] + (" and " + str(len(names) - 1) + " more" if len(names) > 1 else "")
-            if len(target) > 120:
-                target = "project files"
-            verb = {"inProgress": "Editing ", "completed": "Updated ", "failed": "Couldn’t update ", "declined": "Skipped edits to "}.get(item.get("status"))
-            return verb + target if verb else ""
+    if kind == "fileChange" and item.get("changes"):
+        return item.get("status") in ("failed", "declined"), {"inProgress": "I’m making changes to the project", "completed": "The project changes have been saved",
+                "failed": "The project changes could not be saved", "declined": "The proposed changes were declined"}.get(item.get("status"), "")
     if kind == "plan":
-        return message_gist(item.get("text"))
+        return True, message_gist(item.get("text"))
     if kind == "webSearch":
-        query = short_text(item.get("query"), None)
-        return "Checking sources for " + (query if 0 < len(query) <= 120 else "the current task")
-    return ""
+        return False, "I’m looking for information to support the answer"
+    return False, ""
+
+
+def activity(item):
+    return ranked_activity(item)[1]
 
 
 def recent_progress(server, key, cache):
@@ -214,22 +233,34 @@ def recent_progress(server, key, cache):
         if not turns:
             return None, ""
         turn = turns[0]
+        cache_key = (turn["id"], turn["status"])
         page = server.call("thread/items/list", {"threadId": key, "turnId": turn["id"], "limit": 12,
                            "sortDirection": "desc", "deferOutput": {}})
     except RuntimeError:
-        # Older and ephemeral sessions may only provide thread-level status.
-        return (turn["status"], cache.get(turn["id"], "")) if turn else (None, "")
+        return (turn["status"], cache.get(cache_key, "")) if turn else (None, "")
     items = [entry.get("item") or {} for entry in page["data"] if entry.get("turnId") == turn["id"]]
-    if turn["status"] == "completed":
-        # The final response is authoritative even if a tool finishes after it.
+    completed = turn["status"] == "completed"
+    if completed:
         items.sort(key=lambda item: item.get("type") == "agentMessage" and item.get("phase") == "final_answer", reverse=True)
+    fallback = ""
     for item in items:
-        line = activity(item)
-        if line:
-            cache.clear()
-            cache[turn["id"]] = line
-            return turn["status"], line
-    return turn["status"], cache.get(turn["id"], "")
+        kind = item.get("type")
+        if completed and (kind in ("webSearch", "plan") or item.get("phase") == "commentary" or item.get("status") == "inProgress"):
+            continue
+        important, line = ranked_activity(item)
+        if not line:
+            continue
+        if not fallback:
+            fallback = line
+        # A specific visible update or verification result carries more meaning than
+        # routine file reads. Stay within the recent activity of this exact turn.
+        if important:
+            fallback = line
+            break
+    if fallback:
+        cache.clear()
+        cache[cache_key] = fallback
+    return turn["status"], cache.get(cache_key, "")
 
 
 def read_snapshot(server, key, link=None, cache=None):
@@ -241,20 +272,21 @@ def read_snapshot(server, key, link=None, cache=None):
         raise RuntimeError("Codex returned a different thread identity.")
     state, sentence = status(thread)
     title = short_text(thread.get("name"), None) or "Codex session"
-    subject = title if len(title) <= 130 else "this session"
     last, line = recent_progress(server, key, cache if cache is not None else {})
     if state == "needsInput":
-        reason = "Approval needed" if "waitingOnApproval" in thread["status"].get("activeFlags", []) else "Your input is needed"
-        sentence = reason + " — " + (line or subject)
+        if "waitingOnApproval" in thread["status"].get("activeFlags", []):
+            sentence = "Your approval is needed before work can continue"
+        else:
+            sentence = line if last == "inProgress" and line.endswith("?") else "Your answer is needed before work can continue"
     elif state == "running":
-        sentence = line if last == "inProgress" and line else "Working on " + subject
+        sentence = line if last == "inProgress" and line else "Work is underway on your request"
     elif thread["status"]["type"] in ("idle", "notLoaded"):
         if last == "failed":
-            state, sentence = "unavailable", "Turn failed — " + (line or subject)
+            state, sentence = "unavailable", "The work stopped before the request was finished"
         elif last == "interrupted":
-            sentence = "Turn interrupted — " + (line or subject)
+            sentence = "The work was interrupted before this step finished"
         elif last == "completed":
-            sentence = line or ("Finished · " + subject)
+            sentence = line or "Work on this request has finished"
     if sentence[-1:] not in ".!?…":
         sentence += "."
     result = {"provider": "Codex", "sessionID": key, "title": title,
@@ -265,33 +297,87 @@ def read_snapshot(server, key, link=None, cache=None):
     return result
 
 
-def branch_items(server, parents):
-    """Only publish direct, provider-attributed relationships to a selected parent."""
-    found = {}
-    params = {"currentAccountOnly": True, "limit": 100,
-              "sourceKinds": ["cli", "vscode", "appServer", "exec", "subAgent", "subAgentReview",
-                              "subAgentCompact", "subAgentThreadSpawn", "subAgentOther", "unknown"]}
+BRANCH_SOURCES = ["cli", "vscode", "appServer", "exec", "subAgent", "subAgentThreadSpawn", "unknown"]
+
+
+def pages(server, method, params):
+    params = dict(params)
     cursors = set()
     while True:
-        page = server.call("thread/list", params)
-        for thread in page["data"]:
-            for field, kind in (("parentThreadId", "Subagent"), ("forkedFromId", "Fork")):
-                parent = thread.get(field)
-                if parent not in parents or thread["id"] == parent:
-                    continue
-                try:
-                    child = str(uuid.UUID(thread["id"]))
-                except (TypeError, ValueError):
-                    continue
-                label = thread.get("agentNickname") or thread.get("name") or thread.get("agentRole") or kind
-                found.setdefault((parent, child), {"provider": "Codex", "sessionID": child, "parentID": parent,
-                    "branchKind": kind, "title": " ".join(label.split())[:120], "updated": thread.get("updatedAt") or 0,
-                    "state": status(thread)[0] if thread.get("status") else "unavailable"})
+        page = server.call(method, params)
+        yield page["data"]
         cursor = page.get("nextCursor")
         if not cursor or cursor in cursors:
-            break
+            return
         cursors.add(cursor)
         params["cursor"] = cursor
+
+
+def attached_children(parents, directory=None):
+    # The daemon can omit attached workers from thread/list, even while they are running.
+    root = directory or Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    try:
+        with closing(sqlite3.connect((root / "state_5.sqlite").as_uri() + "?mode=ro", uri=True, timeout=0.1)) as db:
+            db.execute("PRAGMA trusted_schema=OFF")
+            return {row[0] for parent in parents for row in db.execute(
+                "SELECT child_thread_id FROM thread_spawn_edges WHERE parent_thread_id = ?", (parent,))}
+    except (sqlite3.Error, ValueError):
+        return set()
+
+
+def spawn_metadata(thread):
+    source = thread.get("source")
+    sub = source.get("subAgent") if isinstance(source, dict) else None
+    return sub.get("thread_spawn") if isinstance(sub, dict) else None
+
+
+def branch_row(thread, parent, kind, title):
+    child = str(uuid.UUID(thread["id"]))
+    state = status(thread)[0] if thread.get("status") else "unavailable"
+    return {"provider": "Codex", "sessionID": child, "parentID": parent, "branchKind": kind,
+            "title": " ".join(title.split())[:120], "updated": thread.get("updatedAt") or 0, "state": state}
+
+
+def branch_items(server, parents, include_forks=True, directory=None):
+    params = {"currentAccountOnly": True, "limit": 100, "sourceKinds": BRANCH_SOURCES}
+    selected = server.call("thread/list", dict(params, includedThreadIds=sorted(parents)))["data"]
+    parents = parents.intersection(row["id"] for row in selected)
+    if not parents:
+        return []
+    attached = attached_children(parents, directory)
+    found = {}
+    for loaded in pages(server, "thread/loaded/list", {"limit": 100}):
+        if not loaded:
+            continue
+        listed = server.call("thread/list", dict(params, includedThreadIds=loaded))["data"]
+        candidates = attached.intersection(loaded)
+        for row in listed:
+            spawn = spawn_metadata(row)
+            if row.get("parentThreadId") in parents or isinstance(spawn, dict) and spawn.get("parent_thread_id") in parents:
+                candidates.add(row["id"])
+        for child in candidates:
+            try:
+                thread = server.call("thread/read", {"threadId": child, "includeTurns": False})["thread"]
+            except RPCRejected:
+                continue  # The worker may finish between listing and reading it.
+            spawn = spawn_metadata(thread)
+            if thread["id"] != child or not isinstance(spawn, dict):
+                continue
+            parent = thread.get("parentThreadId") or spawn.get("parent_thread_id")
+            if parent not in parents or child == parent or (thread.get("status") or {}).get("type") != "active":
+                continue
+            path = (spawn.get("agent_path") or "").rstrip("/").rsplit("/", 1)[-1]
+            label = thread.get("name") or path.replace("_", " ").replace("-", " ") or thread.get("agentRole") or "Subagent"
+            found[parent, child] = branch_row(thread, parent, "Subagent", label)
+    if include_forks:
+        for rows in pages(server, "thread/list", params):
+            for thread in rows:
+                parent = thread.get("forkedFromId")
+                source = thread.get("source")
+                if (parent not in parents or parent == thread["id"] or thread.get("parentThreadId")
+                        or (isinstance(source, dict) and "subAgent" in source)):
+                    continue
+                found[parent, thread["id"]] = branch_row(thread, parent, "Fork", thread.get("name") or "Fork")
     return sorted(found.values(), key=lambda r: (r["state"] in ("needsInput", "running"), r["updated"]), reverse=True)
 
 

@@ -6,10 +6,12 @@ import sqlite3
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
+from time import monotonic
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from adapters.library import from_export, windows_browser_items
+from status_script import StatusScript
 from companion import Library, Session, account_usage, branches_for, codex_library, desktop_catalog, from_link, poll, reply
 
 BG = "#13191e"
@@ -17,7 +19,8 @@ CARD = "#212b32"
 INK = "#edf2f3"
 MINT = "#9fe2c7"
 MUTED = "#afbdc3"
-LABELS = {"running": "Working", "ready": "Ready", "needsInput": "Needs input", "unavailable": "Unavailable"}
+LABELS = {"running": "Working", "ready": "Ready", "needsInput": "Needs input", "unavailable": "Unavailable",
+          "monitoring": "Monitoring", "offline": "Offline"}
 
 
 def animation_enabled():
@@ -36,8 +39,11 @@ class Panel:
         self.desktop_rows = {}
         self.active_codex = {}
         self.branches = []
+        self.branch_parents = set()
+        self.branch_polls = 0
         self.entries = {}
         self.shown_sentences = {}
+        self.scripts = {}
         self.drafts = {}
         self.feedback = {}
         self.check_draft = {}
@@ -69,6 +75,7 @@ class Panel:
         root.after(80, self.receive)
         root.after(100, self.refresh_pins)
         root.after(100, self.refresh_catalogs)
+        root.after(100, self.refresh_branches)
 
     def job(self, name, task, done):
         if name in self.jobs:
@@ -120,14 +127,26 @@ class Panel:
                 self.active_codex = rows
                 self.filter_rows()
             self.job("Active Codex", loaded, active)
-        parents = {p.sessionID for p in pins if p.provider == "Codex"}
-        if self.expanded and parents:
-            def branches(rows):
-                if self.branches != rows:
-                    self.branches = rows
-                    self.render()
-            self.job("Read branches", lambda: branches_for(parents), branches)
         self.root.after(5000, self.refresh_catalogs)
+
+    def refresh_branches(self):
+        parents = {p.sessionID for p in self.library.pins if p.provider == "Codex"} if self.expanded else set()
+        if parents and "Read branches" not in self.jobs:
+            full = self.branch_polls % 12 == 0 or parents != self.branch_parents
+            self.branch_polls += 1
+            self.branch_parents = parents
+            def apply(rows):
+                visible = rows or []
+                if rows is None or not full:
+                    visible = visible + [r for r in self.branches if r["branchKind"] == "Fork" and r["parentID"] in parents]
+                if visible != self.branches:
+                    self.branches = visible
+                    self.render()
+            self.job("Read branches", lambda: branches_for(parents, full), apply)
+        elif not parents:
+            self.branch_parents = set()
+            self.branches = []
+        self.root.after(3000, self.refresh_branches)
 
     def updated(self, values, provider="Codex"):
 
@@ -190,6 +209,7 @@ class Panel:
                 self.button(nav, "Previous", lambda: step(-1)).pack(side="left")
                 tk.Label(nav, text=f"{self.page + 1} / {pages}", bg=BG, fg=MUTED).pack(side="left")
                 self.button(nav, "Next", lambda: step(1)).pack(side="left")
+        self.scripts = {key: script for key, script in self.scripts.items() if key in self.entries}
         if editing and editing[0] in self.entries:
             entry = self.entries[editing[0]]
             entry.focus_set()
@@ -220,41 +240,52 @@ class Panel:
             for child in self.branches:
                 if child["parentID"] == pin.sessionID:
                     branch = Session.from_row(child)
-                    self.button(frame, child["branchKind"] + " · " + branch.title,
+                    name = child["branchKind"]
+                    if child.get("state") in ("running", "needsInput", "ready"):
+                        name += " · " + LABELS[child["state"]]
+                    self.button(frame, name + " · " + branch.title,
                                 lambda p=branch: self.jump(p), wraplength=205).pack(anchor="w")
         self.reply_box(frame, pin)
 
     def summary(self, frame, key, sentence):
+        script = self.scripts.setdefault(key, StatusScript())
+        animate = animation_enabled()
+        script.receive(sentence, monotonic(), animate and self.shown_sentences.get(key) != sentence)
         area = tk.Frame(frame, bg=CARD)
         area.pack(fill="x")
-        label = tk.Label(area, text=sentence, bg=CARD, fg=INK, wraplength=225,
-                         anchor="nw", justify="left", font=("Segoe UI", 10))
-        label.pack(fill="both", expand=True)
-        previous = self.shown_sentences.get(key)
-        self.shown_sentences[key] = sentence
-        if previous == sentence or not animation_enabled():
-            return
-        # Reserve the full paragraph's space so the reply field stays still.
-        label.update_idletasks()
-        area.configure(width=label.winfo_reqwidth(), height=label.winfo_reqheight())
-        area.pack_propagate(False)
+        label = tk.Label(area, bg=CARD, fg=INK, wraplength=225, anchor="nw", justify="left",
+                         font=("Segoe UI", 10))
+        label.pack(fill="x")
+        mask = tk.Frame(area, bg=CARD)
         callback = None
+
+        def draw():
+            nonlocal callback
+            if not label.winfo_exists():
+                return
+            now = monotonic()
+            script.advance(now, animate)
+            self.shown_sentences[key] = script.current
+            label.configure(text=script.current)
+            if script.phase == "revealing":
+                progress = script.progress(now)
+                mask.place(relx=0, rely=progress, relwidth=1, relheight=1-progress)
+            else:
+                mask.place_forget()
+            callback = None
+            if script.deadline is not None:
+                delay = 33 if script.phase == "revealing" else max(1, int((script.deadline - now)*1000)+1)
+                callback = self.root.after(delay, draw)
+
         def reveal(_event):
             if callback is not None:
                 self.root.after_cancel(callback)
-            label.configure(text=sentence)
-        def advance(i):
-            nonlocal callback
-            callback = None
-            if not label.winfo_exists():
-                return
-            label.configure(text=sentence[:i])
-            if i < len(sentence):
-                char = sentence[i-1]
-                delay = 340 if char in ".!?" else 190 if char in ",:—;" else 64 if char.isspace() else 43
-                callback = self.root.after(delay, advance, i+1)
+            script.reveal(monotonic())
+            draw()
+
         label.bind("<Button-1>", reveal)
-        advance(1)
+        mask.bind("<Button-1>", reveal)
+        draw()
 
     def reply_box(self, frame, pin):
         key = pin.key
@@ -293,8 +324,8 @@ class Panel:
             except tk.TclError:
                 self.feedback[key] = "Couldn’t copy draft"
             else:
-                self.feedback[key] = "Draft copied · paste in the conversation"
-                self.jump(pin)
+                opened = self.jump(pin)
+                self.feedback[key] = "Draft copied · paste in the conversation" if opened else "Draft copied · couldn’t open the session"
             self.render()
             return
         def done(outcome):
@@ -335,8 +366,9 @@ class Panel:
         except OSError:
             messagebox.showerror("Open session", "Windows could not open this session. Check its default app.",
                                  parent=self.root)
-        else:
-            self.collapse()
+            return False
+        self.collapse()
+        return True
 
     def commit(self, change):
         updated = deepcopy(self.library)
@@ -477,13 +509,33 @@ class Panel:
             try:
                 return desktop_catalog()
             except (OSError, ValueError, sqlite3.Error):
-                return {}
+                return None
         def done(rows):
+            prior = self.desktop_rows
+            if rows is None:
+                rows = {key: dict(row, connected=False, state=None, activityText=None) for key, row in prior.items()}
             self.desktop_rows = rows
             self.filter_rows()
-            values = {key: {"title": row["title"], "sentence": row["activityText"],
-                            "state": row["state"]}
-                      for key, row in rows.items() if row.get("activityText")}
+            values = {}
+            for pin in self.library.pins:
+                row = rows.get(pin.key)
+                if not row:
+                    continue
+                state = row.get("state") or "monitoring"
+                sentence = row.get("activityText") or "No active turn reported."
+                old = self.snapshots.get(pin.key, {})
+                if not row["connected"]:
+                    state, sentence = "offline", "Open ChatGPT to resume monitoring."
+                elif state == "monitoring":
+                    if old.get("state") == "ready":
+                        sentence = "Last response is ready."
+                    elif old.get("state") == "running":
+                        sentence = "ChatGPT stopped reporting activity."
+                    elif old.get("state") == "monitoring":
+                        sentence = old["sentence"]
+                        if row["updated"] > prior.get(pin.key, {}).get("updated", row["updated"]):
+                            sentence = "Conversation updated in ChatGPT."
+                values[pin.key] = {"title": row["title"], "state": state, "sentence": sentence}
             self.updated(values, "ChatGPT")
         self.job("Read desktop catalog", read, done)
 

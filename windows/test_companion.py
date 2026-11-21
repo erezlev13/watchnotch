@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -83,6 +84,41 @@ class CompanionTests(unittest.TestCase):
             self.assertEqual(rows[0]["title"], "A title")
             self.assertEqual(set(rows[0]), {"sessionID", "title", "updated", "provider"})
 
+    def test_work_activity_requires_running_desktop_and_matching_profile(self):
+        from companion import desktop_catalog
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "sqlite").mkdir()
+            db = sqlite3.connect(root / "sqlite/codex.db")
+            with db:
+                db.execute("CREATE TABLE local_thread_catalog(thread_id,display_title,source_updated_at,source_kind,missing_candidate,chatgpt_async_status,conversation_origin)")
+                db.execute("INSERT INTO local_thread_catalog VALUES(?, 'Work', 102, 'chatgpt', 0, 3, 'tpp')", (A,))
+                db.execute("CREATE TABLE local_thread_catalog_sync_state(host_id)")
+                db.execute("INSERT INTO local_thread_catalog_sync_state VALUES('chatgpt:a:u')")
+                db.execute("CREATE TABLE active_chat_turns(profile,account_id,user_id,thread_id,observed_at_ms)")
+                db.execute("INSERT INTO active_chat_turns VALUES('profile','a','u',?,101000)", (B,))
+            db.close()
+            with patch.dict(os.environ, CODEX_HOME=tmp), patch("companion.desktop.launch_time") as launched, patch("companion.desktop.profile_paths", return_value=("profile",)):
+                launched.return_value = None
+                offline = desktop_catalog()
+                self.assertFalse(offline["ChatGPT", A]["connected"])
+                self.assertNotIn("state", offline["ChatGPT", A])
+                self.assertNotIn(("ChatGPT", B), offline)
+                launched.return_value = 100
+                live = desktop_catalog()
+                self.assertEqual(live["ChatGPT", A]["activityText"], "ChatGPT is writing a reply.")
+                self.assertTrue(live["ChatGPT", A]["work"])
+                self.assertEqual(live["ChatGPT", B]["state"], "running")
+                launched.return_value = 102
+                self.assertNotIn(("ChatGPT", B), desktop_catalog())
+
+    @unittest.skipUnless(os.name == "nt", "Windows desktop process discovery")
+    def test_query_current_desktop(self):
+        from adapters.desktop import launch_time
+        from time import time
+        launched = launch_time()
+        self.assertTrue(launched is None or 0 < launched <= time())
+
     def test_thread_library_pages_and_repeated_cursor(self):
         class Pages:
             def call(self, method, params):
@@ -106,7 +142,7 @@ class CompanionTests(unittest.TestCase):
                     return {"thread": {"id": A, "name": "Session", "status": {"type": "active", "activeFlags": []}}}
                 if method == "thread/turns/list":
                     return {"data": [{"id": "turn", "status": "inProgress"}]}
-                return {"data": [{"turnId": "turn", "item": {"type": "agentMessage", "text": "Reading files."}}]}
+                return {"data": [{"turnId": "turn", "item": {"type": "agentMessage", "text": "The session library is ready to use."}}]}
         case = self
         @contextmanager
         def connected():
@@ -116,7 +152,7 @@ class CompanionTests(unittest.TestCase):
         cache = {}
         live = poll([pin], {}, cache, connected)
         stale = poll([pin], live, cache, offline)
-        self.assertEqual(stale[pin.key]["sentence"], "Reading files.")
+        self.assertEqual(stale[pin.key]["sentence"], "The session library is ready to use.")
         self.assertEqual(stale[pin.key]["state"], "unavailable")
         self.assertEqual(poll([pin], stale, cache, connected), live)
         self.assertEqual(poll([], live, cache, offline), {})
