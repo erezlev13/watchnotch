@@ -95,13 +95,29 @@ def desktop_items(directory):
     # Read only the conversation index, never message bodies or account credentials.
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
         db.execute("PRAGMA trusted_schema=OFF")
-        query = """SELECT thread_id, display_title, source_updated_at
-                   FROM local_thread_catalog
-                   WHERE source_kind = 'chatgpt' AND missing_candidate = 0"""
-        for identifier, title, updated in db.execute(query):
-            normalized = item(identifier, title, updated)
+        columns = {row[1] for row in db.execute("PRAGMA table_info(local_thread_catalog)")}
+        activity_column = "chatgpt_async_status" if "chatgpt_async_status" in columns else "NULL"
+        origin = "conversation_origin" if "conversation_origin" in columns else "NULL"
+        recency = "source_recency_at" if "source_recency_at" in columns else "NULL"
+        created = "source_created_at" if "source_created_at" in columns else "NULL"
+        query = f"""SELECT thread_id, display_title, source_updated_at, {activity_column}, {origin}, {recency}, {created}
+                    FROM local_thread_catalog WHERE source_kind = 'chatgpt' AND missing_candidate = 0"""
+        chats = {}
+        for identifier, title, updated, async_status, surface, recent, started in db.execute(query):
+            date = max((v for v in (updated, recent, started) if isinstance(v, (int, float))), default=0)
+            normalized = item(identifier, title, date)
             if normalized:
-                yield normalized
+                if surface == "tpp":
+                    normalized["work"] = True
+                descriptions = {1: "Working on the request", 3: "Writing a response",
+                                4: "A new response is ready", 5: "Working in ChatGPT",
+                                6: "Processing the current turn", 7: "Working in the background"}
+                if async_status in descriptions:
+                    normalized["state"] = "ready" if async_status == 4 else "running"
+                    normalized["activityText"] = descriptions[async_status]
+                chats[normalized["sessionID"]] = normalized
+
+        yield from chats.values()
 
 
 def windows_browser_items(local, roaming):

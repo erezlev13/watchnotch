@@ -1,4 +1,4 @@
-"""Session library and read-only Codex connection for the Windows companion."""
+"""Session library and Codex connection for the Windows companion."""
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 import json
@@ -12,7 +12,8 @@ import threading
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from adapters.codex_client import Client, library_page, read_snapshot
+from adapters.codex_client import Client, branch_items, library_page, read_snapshot, send_reply
+from adapters.library import desktop_items
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shared"))
 from account_usage import read_usage
@@ -32,6 +33,10 @@ class Session:
         title = " ".join(str(self.title or "").split())
         object.__setattr__(self, "title", "".join(c for c in title if c.isprintable())[:120]
                            or self.provider + " " + self.sessionID[:8])
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(row["provider"], row["sessionID"], row["title"], row.get("updated", 0))
 
     @property
     def key(self):
@@ -159,19 +164,44 @@ def account_usage():
         return []
 
 
-def codex_library():
+def codex_library(loaded=False):
     rows, seen = {}, set()
     cursor = None
     while True:
         with connection() as server:
-            page = library_page(server, cursor)
+            page = library_page(server, cursor, loaded)
         for row in page["items"]:
-            session = Session(**row)
+            if loaded and row["state"] not in ("running", "needsInput"):
+                continue
+            session = Session.from_row(row)
             rows[session.key] = session
         cursor = page["next"]
         if not cursor or cursor in seen:
             return rows
         seen.add(cursor)
+
+
+def desktop_catalog():
+    home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    return {("ChatGPT", row["sessionID"]): row for row in desktop_items(home)}
+
+
+def branches_for(parents):
+    try:
+        with connection() as server:
+            return branch_items(server, parents)
+    except (OSError, RuntimeError, ValueError):
+        return []
+
+
+def reply(pin, text):
+    if pin.provider != "Codex":
+        return "openSession"
+    try:
+        with connection() as server:
+            return send_reply(server, pin.sessionID, text)
+    except (RuntimeError, OSError, ValueError, KeyError):
+        return "rejected"
 
 
 def poll(pins, previous, cache, connect=connection):

@@ -51,3 +51,56 @@ class ProgressTest(unittest.TestCase):
 
     def test_live_gist(self):
         self.assertEqual(activity({"type": "agentMessage", "text": "Okay! I’m checking the Windows build."}), "Checking the Windows build.")
+
+class ReplyTest(unittest.TestCase):
+    def test_replies_bound_to_each_selected_session(self):
+        from adapters.codex_client import send_reply
+        calls = []
+        class Local:
+            def call(self, method, params):
+                if method == "thread/read":
+                    return {"thread": {"id": params["threadId"], "status": {"type":"idle"}}}
+                calls.append((params["threadId"], params["input"][0]["text"]))
+                return {"turn":{"id":"accepted"}}
+        local = Local()
+        self.assertEqual(send_reply(local, "first", "A"), "sent")
+        self.assertEqual(send_reply(local, "second", "B"), "sent")
+        self.assertEqual(calls, [("first","A"),("second","B")])
+
+    def test_waiting_and_ambiguous_delivery(self):
+        from adapters.codex_client import send_reply
+        class Local:
+            calls = 0
+            flags = ["waitingOnApproval"]
+            def call(self, method, params):
+                if method == "thread/read":
+                    return {"thread":{"id":"selected","status":{"type":"active","activeFlags":self.flags}}}
+                self.calls += 1
+                raise ConnectionError("lost acknowledgement")
+        local = Local()
+        self.assertEqual(send_reply(local, "selected", "Hi"), "openSession")
+        self.assertEqual(send_reply(local, "other", "Hi"), "openSession")
+        local.flags = []
+        self.assertEqual(send_reply(local, "selected", "Hi"), "uncertain")
+        self.assertEqual(local.calls, 1)
+
+class BranchTest(unittest.TestCase):
+    def test_direct_subagents_and_forks_across_pages(self):
+        from adapters.codex_client import branch_items
+        parent = "11111111-1111-4111-8111-111111111111"
+        agent = "22222222-2222-4222-8222-222222222222"
+        fork = "33333333-3333-4333-8333-333333333333"
+        class Local:
+            def call(self, method, params):
+                assert method == "thread/list" and params["currentAccountOnly"] and not params.get("useStateDbOnly")
+                if "cursor" not in params:
+                    return {"data":[{"id":agent,"parentThreadId":parent,"agentNickname":"Reviewer","status":{"type":"active"}}],"nextCursor":"second"}
+                return {"data":[{"id":fork,"forkedFromId":parent,"name":"Another approach"},
+                                {"id":agent, "parentThreadId":parent}, {"id":parent,"parentThreadId":fork}]}
+        branches = branch_items(Local(), {parent})
+        self.assertEqual([(b["sessionID"], b["branchKind"]) for b in branches], [(agent,"Subagent"),(fork,"Fork")])
+
+    def test_complete_sentence_survives_past_old_character_limit(self):
+        from adapters.codex_client import message_gist
+        sentence = "The Windows build now applies the display fix after the monitor reconnects and keeps every pinned session on the correct screen."
+        self.assertEqual(message_gist("Yes. " + sentence + " More information follows."), sentence)

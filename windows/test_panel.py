@@ -6,7 +6,7 @@ import tkinter as tk
 import unittest
 from unittest.mock import patch
 
-from companion import Library
+from companion import Library, Session
 from panel import Panel
 
 
@@ -28,6 +28,36 @@ class PanelTests(unittest.TestCase):
                     usage.return_value = []
                     panel.show_usage()
                     self.assertEqual(panel.usage_text.get(), "Account usage unavailable.")
+            finally:
+                root.destroy()
+
+    def test_pinned_drafts_uncertain_send_and_chat_handoff(self):
+        codex = Session("Codex", "11111111-1111-4111-8111-111111111111", "Code")
+        chat = Session("ChatGPT", "22222222-2222-4222-8222-222222222222", "Chat")
+        with TemporaryDirectory() as tmp:
+            root = tk.Tk()
+            try:
+                panel = Panel(root, Path(tmp) / "library.json")
+                panel.library.pins = [codex, chat]
+                panel.snapshots[codex.key] = {"state": "ready"}
+                panel.toggle()
+                panel.drafts[codex.key].set("Codex draft")
+                panel.drafts[chat.key].set("Chat draft")
+                panel.collapse()
+                panel.toggle()
+                def complete(_name, read, display):
+                    display(read())
+                with patch.object(panel, "job", side_effect=complete), patch("panel.reply", return_value="uncertain") as send:
+                    panel.submit(codex)
+                    send.assert_called_once_with(codex, "Codex draft")
+                    with patch.object(root, "clipboard_clear"), patch.object(root, "clipboard_append") as copy, patch.object(panel, "jump") as jump:
+                        panel.submit(codex)
+                        jump.assert_called_once_with(codex)
+                        panel.submit(chat)
+                        self.assertEqual(copy.call_args.args, ("Chat draft",))
+                        self.assertEqual(jump.call_args.args, (chat,))
+                    self.assertEqual(send.call_count, 1)
+                self.assertEqual(panel.drafts[codex.key].get(), "Codex draft")
             finally:
                 root.destroy()
 
