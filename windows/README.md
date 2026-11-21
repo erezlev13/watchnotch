@@ -1,5 +1,7 @@
 # watchnotch for Windows
 
+**More AI sessions. Less switching.** WatchNotch is for anyone following parallel AI conversations—research, writing, planning, learning and coding—not only developers. This Windows preview currently supports the specific ChatGPT and Codex capabilities documented below; broader provider support is planned, not implied.
+
 The Windows preview places a collapsible session strip at the top of the primary display. Click the owl to expand pinned cards. Open **Library** to find sessions, paste a link, or unpin a card. Cards keep their pin order across launches and page across narrower displays. The owl follows the most recently changed pinned session that is working or needs input. Status updates wrap in the card and appear top to bottom. New sentences wait until the current one has had time to be read. Click an update to reveal it immediately. With Windows animations disabled, the full update appears at once.
 
 ## Run
