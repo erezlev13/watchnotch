@@ -6,5 +6,7 @@ swiftc -swift-version 5 -module-cache-path "$PWD/.build/module-cache" Sources/Se
 .build/store-tests
 swiftc -swift-version 5 -module-cache-path "$PWD/.build/module-cache" Sources/StatusScript.swift Tests/StatusScript/main.swift -o .build/status-script-tests
 .build/status-script-tests
+swiftc -swift-version 5 -module-cache-path "$PWD/.build/module-cache" Sources/Session.swift Sources/SessionJump.swift Sources/DesktopChatReply.swift Sources/TileReply.swift Tests/DesktopChatReply/main.swift -o .build/desktop-chat-reply-tests
+.build/desktop-chat-reply-tests
 PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -m unittest discover -s Adapters/ChatGPT -p 'test_*.py'
 PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -m unittest discover -s Adapters/Codex -p 'test_*.py'
