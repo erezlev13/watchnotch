@@ -5,11 +5,50 @@ enum SessionState: String, Codable {
     case running, needsInput, ready, unavailable
 }
 
+struct RequestOption: Codable, Equatable, Identifiable {
+    let id: String
+    let label: String
+    var description: String?
+}
+
+struct RequestQuestion: Codable, Equatable, Identifiable {
+    let id: String
+    let prompt: String
+    let options: [RequestOption]
+    var allowsOther: Bool?
+    var isSecret: Bool?
+}
+
 struct PendingRequest: Codable, Equatable {
     let id: String
     let action: String
     let reason: String
     let expiresAt: Date
+    var route: String?
+    var kind: String?
+    var questions: [RequestQuestion]?
+
+    var hasSelectableQuestions: Bool {
+        guard let questions, !id.isEmpty, ["approval", "question"].contains(kind),
+              !questions.isEmpty, Set(questions.map(\.id)).count == questions.count else { return false }
+        return questions.allSatisfy { question in
+            !question.id.isEmpty && !question.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            question.isSecret != true && (!question.options.isEmpty || question.allowsOther == true) &&
+            (kind != "approval" || question.allowsOther != true) &&
+            Set(question.options.map(\.id)).count == question.options.count &&
+            question.options.allSatisfy { !$0.id.isEmpty && !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+    }
+
+    func accepts(_ answers: [String: String]) -> Bool {
+        guard hasSelectableQuestions, let questions, questions.count == answers.count else { return false }
+        return questions.allSatisfy { question in
+            guard let answer = answers[question.id] else { return false }
+            return question.options.contains { $0.id == answer } ||
+                (question.allowsOther == true && answer.utf8.count <= 8192 &&
+                 !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
 }
 
 struct SessionDetails: Codable, Equatable {
@@ -62,6 +101,7 @@ struct Decision: Codable {
     let sessionID: String
     let requestID: String
     let decision: String
+    var answers: [String: String]?
 }
 
 enum Format {
