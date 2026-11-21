@@ -14,7 +14,7 @@ The monitor writes a snapshot in `~/Library/Application Support/Mac Notch Sessio
 
 The reply field at the bottom of each tile sends text to the selected thread using the local App Server. The adapter checks the thread identity and state first, then calls `turn/start`. A returned turn ID confirms acceptance. If delivery is uncertain, the draft stays on the tile for inspection in the original session.
 
-The library uses account-scoped thread metadata to identify subagents and forks. A thread’s `parentThreadId` or `forkedFromId` connects it to its parent tile. Select the compact branch tile to open that specific Codex thread.
+The library checks active workers under account-visible pinned parents every three seconds while the row is open. It identifies delegated workers by their spawn metadata, confirms their current runtime status, and uses the thread title or task path for the label. Background Guardian reviews are excluded. Forks are discovered separately using `forkedFromId`. Select the compact branch tile to open that specific Codex thread.
 
 ## What was verified
 
