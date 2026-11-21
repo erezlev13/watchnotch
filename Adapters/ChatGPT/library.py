@@ -98,12 +98,18 @@ def desktop_items(directory):
     # Read only the conversation index, never message bodies or account credentials.
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
         db.execute("PRAGMA trusted_schema=OFF")
-        query = """SELECT thread_id, display_title, source_updated_at
+        columns = {row[1] for row in db.execute("PRAGMA table_info(local_thread_catalog)")}
+        activity_column = "chatgpt_async_status" if "chatgpt_async_status" in columns else "NULL"
+        query = f"""SELECT thread_id, display_title, source_updated_at, {activity_column}
                    FROM local_thread_catalog
                    WHERE source_kind = 'chatgpt' AND missing_candidate = 0"""
-        for identifier, title, updated in db.execute(query):
+        for identifier, title, updated, async_status in db.execute(query):
             normalized = item(identifier, title, updated)
             if normalized:
+                # The desktop client treats 1, streaming (3), and realtime (5–7) as running.
+                # 4 means unread. A missing value is common and carries no activity signal.
+                if async_status in (1, 3, 5, 6, 7):
+                    normalized["state"] = "running"
                 yield normalized
 
 

@@ -135,6 +135,7 @@ private struct SessionTile: View {
         }
     }
 
+    @State private var showingDetails = false
     @State private var opening = false
     private var jump: SessionJump? { SessionJump(card: card,pairedWebLink: store.saved.webLinks?[card.value.sessionID]) }
 
@@ -157,6 +158,21 @@ private struct SessionTile: View {
                 if card.origin == .fixture { Text("· Demo").foregroundStyle(.white.opacity(0.65)) }
                 else if card.value.state != .unavailable { Text("· Live").foregroundStyle(accent) }
                 Spacer(minLength: 2)
+                Button { showingDetails.toggle() } label: {
+                    Image(systemName: "info.circle").frame(width: 22, height: 22)
+                }
+                .help("Model, reasoning effort and session tokens")
+                .accessibilityLabel("Session details for " + card.value.title)
+                .popover(isPresented: $showingDetails, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(card.value.title).font(.headline).lineLimit(2)
+                        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 7) {
+                            GridRow { Text("Model"); Text(card.value.details?.model ?? "Not reported") }
+                            GridRow { Text("Effort"); Text(card.value.details?.effort ?? "Not reported") }
+                            GridRow { Text("Session tokens"); Text(card.value.details?.tokens?.formatted() ?? "Not reported") }
+                        }.font(.callout).textSelection(.enabled)
+                    }.padding(16).frame(maxWidth: 340, alignment: .leading)
+                }
                 ActivityMark(state: card.value.state,tint: card.tint)
                 Text(stateName).foregroundStyle(card.tint)
             }.font(.system(size: 10.5,weight: .medium))
@@ -302,7 +318,9 @@ private struct TypedStatus: View {
                     .accessibilityHidden(true)
             }
             .font(.system(size: 13,weight: .medium,design: .monospaced))
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(sentence)
             .accessibilityElement(children: .ignore)
             .accessibilityHidden(false)
             .accessibilityLabel(sentence)

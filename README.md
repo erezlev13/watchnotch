@@ -4,7 +4,7 @@
 
 [Website and Mac download](https://erezlev13.github.io/watchnotch/)
 
-A local macOS app for following selected Codex and ChatGPT sessions. Click the strip by the camera or use the menu bar item to expand it. The owl perches on the pinned live session with the latest status update. When only demo activity is available, it follows the demo. Saved ChatGPT links do not report live activity. The centered row grows with your pins. Each tile is at most 300 points wide, and the number that fit depends on the display. Moving to a smaller display preserves existing pins. Each tile types its updated status in white and shows its own pending decision or result. Reduce Motion displays new sentences immediately. On a narrow display, scroll the row horizontally.
+A local macOS app for following selected Codex and ChatGPT sessions. Click the strip by the camera or use the menu bar item to expand it. The owl perches on the pinned live session with the latest status update. When only demo activity is available, it follows the demo. Saved ChatGPT links do not report live activity. The centered row grows with your pins. Each tile is at most 300 points wide, and the number that fit depends on the display. Moving to a smaller display preserves existing pins. Each tile types a single status line in white and shows its own pending decision or result. Reduce Motion displays new sentences immediately. On a narrow display, scroll the row horizontally.
 
 ![Three horizontal session cards with a live Codex turn, a saved ChatGPT link and a demo approval](Demo/mixed-sessions.png)
 
@@ -27,7 +27,7 @@ The app starts with three labeled demo cards. Open the sliders or choose **Sessi
 
 The packaged app observed a real, disposable Codex App Server thread run a ten-second sleep. Separate verification observed ready, running, completion, disconnect and reconnect. Native desktop thread observation and real approval delivery still need an end-to-end test with a desktop-created thread. ChatGPT Accessibility access was unavailable to the test process. The saved-link test used synthetic IDs. The expanded panel exposes action buttons only when a provider supplies an actionable request.
 
-The prototype stores pins, sample outputs and adapter snapshots in the user's Application Support folder under Mac Notch Session Companion. Opening the library lists local thread titles and IDs. Detailed activity is requested only for pinned Codex threads. Direct ChatGPT URLs are stored locally. The two integration notes contain exact versions and reproduction steps. [Codex adapter](Adapters/Codex/README.md) · [ChatGPT adapter](Adapters/ChatGPT/README.md)
+The prototype stores pins, sample outputs and adapter snapshots in the user's Application Support folder under Mac Notch Session Companion. Opening the library lists local thread titles and IDs. The Active filter refreshes about every five seconds while the library is open. It includes working and waiting Codex threads and ChatGPT conversations marked active in the desktop catalog. Browser and export links have no live signal. Detailed activity is requested only for pinned Codex threads. The tile’s info button shows the configured model, reasoning effort and token count from that thread’s local record when available. Direct ChatGPT URLs are stored locally. The two integration notes contain exact versions and reproduction steps. [Codex adapter](Adapters/Codex/README.md) · [ChatGPT adapter](Adapters/ChatGPT/README.md)
 
 ## Jump back to a session
 

@@ -12,6 +12,12 @@ struct PendingRequest: Codable, Equatable {
     let expiresAt: Date
 }
 
+struct SessionDetails: Codable, Equatable {
+    let model: String?
+    let effort: String?
+    let tokens: Int64?
+}
+
 struct Snapshot: Codable, Equatable {
     let provider: String
     let sessionID: String
@@ -21,6 +27,7 @@ struct Snapshot: Codable, Equatable {
     var updatedAt: Date
     var sessionURL: URL?
     var resultURL: URL?
+    var details: SessionDetails?
     var request: PendingRequest?
 }
 
@@ -126,5 +133,6 @@ struct LibraryItem: Codable, Identifiable {
     let sessionID: String
     let title: String
     let updated: Double
+    var state: SessionState?
     var id: Identity { Identity(origin: .adapter, provider: provider, sessionID: sessionID) }
 }

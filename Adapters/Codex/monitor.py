@@ -3,7 +3,7 @@
 import argparse
 import base64
 import hashlib
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import fcntl
 import json
@@ -12,6 +12,7 @@ import re
 import shlex
 from pathlib import Path
 import socket
+import sqlite3
 import stat
 import struct
 import signal
@@ -162,10 +163,30 @@ def short_text(value, limit=148):
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
     text = re.sub(r"https?://\S+|(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{10,}", "…", text)
     text = " ".join(text.replace("*", "").replace("`", "").split()).strip("# -")
-    text = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
     if len(text) > limit:
-        text = text[:limit - 1].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+        text = (text[:limit - 1].rsplit(" ", 1)[0] or text[:limit - 1]).rstrip(".,;:") + "…"
     return text
+
+
+# Prefer a concrete clause over a greeting, an acknowledgement or a Markdown heading.
+ACK = r"(?:yes|no|ok(?:ay)?|sure|absolutely|certainly|done|great|got it|of course|you're right|good (?:question|point)|thanks(?: for (?:asking|the context))?)"
+
+
+def message_gist(value):
+    visible = re.sub(r"```.*?(?:```|$)", " ", value or "", flags=re.S)
+    for raw in visible.splitlines():
+        line = re.sub(r"^\s*(?:[-+*•]\s+|\d+[.)]\s+)", "", raw).strip()
+        if not line or line.startswith(("#", ">")) or line.endswith(":"):
+            continue
+        for clause in re.split(r"(?<=[.!?])\s+", line):
+            clause = short_text(clause, 500)
+            clause = re.sub(r"^" + ACK + r"(?:\s*[,!:—–-]\s*|[.!?]*$)", "", clause, flags=re.I)
+            preamble = r"(?:summary|result|what changed|here.s (?:the gist|what (?:I|we) found)|(?:let me|I.ll) (?:check|take a look|look into (?:it|that))|(?:I.m |I am )?(?:working on (?:it|that)|on it))"
+            if not clause or re.fullmatch(preamble + r"[.!:]?", clause, re.I):
+                continue
+            clause = re.sub(r"^(?:I(?:’|')m (?:currently )?|I am (?:currently )?)(?=\w+ing\b)", "", clause, flags=re.I)
+            return short_text(clause[:1].upper() + clause[1:], 96)
+    return ""
 
 
 def command_activity(item):
@@ -173,6 +194,10 @@ def command_activity(item):
     if status not in ("inProgress", "completed", "failed", "declined"):
         return ""
     active = status == "inProgress"
+    if status == "declined":
+        return "Command declined"
+    if status == "failed" or (status == "completed" and item.get("exitCode") not in (None, 0)):
+        return "Command failed"
     actions = item.get("commandActions") or []
     for action in actions:
         name = Path(action.get("path") or action.get("name") or "").name
@@ -206,7 +231,7 @@ def activity(item):
         moderation = item.get("moderation") or {}
         if moderation.get("moderated") or (moderation.get("display") or {}).get("mode") in ("block", "hide"):
             return ""
-        return short_text(item.get("text"))
+        return message_gist(item.get("text"))
     if kind == "commandExecution":
         return command_activity(item)
     if kind == "fileChange":
@@ -216,7 +241,7 @@ def activity(item):
             verb = {"inProgress": "Editing ", "completed": "Updated ", "failed": "Couldn’t update ", "declined": "Skipped edits to "}.get(item.get("status"))
             return verb + target if verb else ""
     if kind == "plan":
-        return short_text(item.get("text"))
+        return message_gist(item.get("text"))
     if kind == "webSearch":
         return "Checking sources for " + (short_text(item.get("query"), 72) or "the current task")
     return ""
@@ -235,14 +260,32 @@ def recent_progress(server, key, cache):
     except RuntimeError:
         # Older and ephemeral sessions may only provide thread-level status.
         return (turn["status"], cache.get(turn["id"], "")) if turn else (None, "")
-    for entry in page["data"]:
-        if entry.get("turnId") == turn["id"]:
-            line = activity(entry.get("item") or {})
-            if line:
-                cache.clear()
-                cache[turn["id"]] = line
-                return turn["status"], line
+    items = [entry.get("item") or {} for entry in page["data"] if entry.get("turnId") == turn["id"]]
+    if turn["status"] == "completed":
+        # The final response is authoritative even if a tool finishes after it.
+        items.sort(key=lambda item: item.get("type") == "agentMessage" and item.get("phase") == "final_answer", reverse=True)
+    for item in items:
+        line = activity(item)
+        if line:
+            cache.clear()
+            cache[turn["id"]] = line
+            return turn["status"], line
     return turn["status"], cache.get(turn["id"], "")
+
+
+def thread_tokens(key, directory=None):
+    root = directory or Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    path = root / "state_5.sqlite"
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=0.1)) as db:
+            db.execute("PRAGMA trusted_schema=OFF")
+            row = db.execute("SELECT tokens_used FROM threads WHERE id = ?", (key,)).fetchone()
+            # Zero is the store's default before usage has been recorded.
+            if row and type(row[0]) is int and row[0] > 0:
+                return row[0]
+    except (sqlite3.Error, ValueError):
+        pass
+    return None
 
 
 def read_snapshot(server, key, link=None, cache=None):
@@ -266,11 +309,13 @@ def read_snapshot(server, key, link=None, cache=None):
         elif last == "interrupted":
             sentence = "Turn interrupted — " + (line or title)
         elif last == "completed":
-            sentence = line or ("Finished the last turn in “" + title + "”")
+            sentence = line or ("Finished · " + title)
     if sentence[-1:] not in ".!?…":
         sentence += "."
     result = {"provider": "Codex", "sessionID": key, "title": title,
               "state": state, "sentence": sentence}
+    result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort"),
+                         "tokens": thread_tokens(key)}
     if link:
         result["sessionURL"] = link
     return result
@@ -335,22 +380,29 @@ def watch(key, link, socket, directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="List a page of thread titles and IDs")
+    parser.add_argument("--loaded", action="store_true", help="List activity for loaded sessions in the current account")
     parser.add_argument("--cursor", help="Continue a thread listing")
     parser.add_argument("session", nargs="?", help="Desktop thread link or UUID")
     parser.add_argument("--socket", type=Path, help="Optional App Server control socket")
     args = parser.parse_args()
-    if args.list:
+    if args.list or args.loaded:
         params = {"limit": 60, "currentAccountOnly": True}
         if args.cursor:
             params["cursor"] = args.cursor
         with Server(args.socket) as server:
-            page = server.call("thread/list", params)
+            if args.loaded:
+                loaded = server.call("thread/loaded/list", {"limit": 100, "cursor": args.cursor})
+                rows = server.call("thread/list", {"currentAccountOnly": True, "limit": 100,
+                                   "includedThreadIds": loaded["data"]})["data"] if loaded["data"] else []
+                page = {"data": rows, "nextCursor": loaded.get("nextCursor")}
+            else:
+                page = server.call("thread/list", params)
         items = []
         for row in page["data"]:
             key = str(uuid.UUID(row["id"]))
             name = " ".join((row.get("name") or "").split())[:120]
             items.append({"provider": "Codex", "sessionID": key, "title": name or ("Thread " + key[:8]),
-                          "updated": row.get("updatedAt") or 0})
+                          "updated": row.get("updatedAt") or 0, "state": status(row)[0] if row.get("status") else None})
         print(json.dumps({"items": items, "next": page.get("nextCursor")}))
         return 0
     if not args.session:

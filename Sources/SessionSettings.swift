@@ -14,6 +14,7 @@ private struct LibraryPage: Decodable {
 final class SessionLibrary: ObservableObject {
     @Published private(set) var desktopChats: [LibraryItem] = []
     @Published private(set) var local: [LibraryItem] = []
+    @Published private(set) var activity: [Identity: SessionState] = [:]
     @Published private(set) var loading = false
     @Published private(set) var readingChats = false
     @Published var message: String?
@@ -47,6 +48,7 @@ final class SessionLibrary: ObservableObject {
             desktopChats = page.items
         } catch is CancellationError {
         } catch {
+            desktopChats = desktopChats.map { var row = $0; row.state = nil; return row }
             message = "Couldn’t read the ChatGPT desktop catalog. Use Find on this Mac or import an export."
         }
         var cursor: String?
@@ -58,14 +60,41 @@ final class SessionLibrary: ObservableObject {
                 let page = try await Self.read("monitor", arguments: ["--list"] + (cursor.map { ["--cursor", $0] } ?? []))
                 try Task.checkCancellation()
                 items.append(contentsOf: page.items.filter { seen.insert($0.id).inserted })
-                local = items
                 cursor = page.next
             } while cursor.map({ cursors.insert($0).inserted }) == true
+            local = items
+            activity = Dictionary(uniqueKeysWithValues: items.compactMap { row in row.state.map { (row.id, $0) } })
         } catch is CancellationError {
         } catch {
+            activity = [:]
             message = "Couldn’t read local Codex sessions. Start Codex and refresh, or add a conversation link."
         }
 
+    }
+
+    func updateActivity() async {
+        guard !loading else { return }
+        var current: [Identity: SessionState] = [:]
+        var loadedRows: [LibraryItem] = []
+        var cursor: String?
+        var seen = Set<String>()
+        do {
+            repeat {
+                let page = try await Self.read("monitor", arguments: ["--loaded"] + (cursor.map { ["--cursor", $0] } ?? []))
+                try Task.checkCancellation()
+                loadedRows.append(contentsOf: page.items)
+                for item in page.items { current[item.id] = item.state }
+                cursor = page.next
+            } while cursor.map({ seen.insert($0).inserted }) == true
+        } catch is CancellationError { return }
+        catch { current = [:] }
+        let chats = try? await Self.read("library", arguments: ["--desktop"])
+        guard !Task.isCancelled, !loading else { return }
+        let existing = Set(local.map(\.id))
+        local.append(contentsOf: loadedRows.filter { !existing.contains($0.id) })
+        activity = current
+        if let chats { desktopChats = chats.items }
+        else { desktopChats = desktopChats.map { var row = $0; row.state = nil; return row } }
     }
 
     func findChats(file: URL?, store: Store) async {
@@ -103,7 +132,11 @@ struct SessionSettings: View {
     private var rows: [LibraryItem] {
         let catalog = store.catalog
         func item(_ card: Card) -> LibraryItem {
-            LibraryItem(provider: card.value.provider, sessionID: card.value.sessionID, title: card.value.title, updated: card.value.updatedAt.timeIntervalSince1970)
+            LibraryItem(provider: card.value.provider, sessionID: card.value.sessionID, title: card.value.title, updated: card.value.updatedAt.timeIntervalSince1970, state: card.value.state)
+        }
+        let chatStates = Dictionary(uniqueKeysWithValues: library.desktopChats.compactMap { row in row.state.map { (row.id, $0) } })
+        func liveState(_ row: LibraryItem) -> SessionState? {
+            row.provider == "Codex" ? library.activity[row.id] : chatStates[row.id]
         }
         var items: [LibraryItem]
         switch section {
@@ -114,10 +147,28 @@ struct SessionSettings: View {
             for row in catalog.filter({ $0.origin == .adapter }).map(item) + store.importedChats + library.local + library.desktopChats {
                 unique[row.id] = row
             }
-            items = unique.values.filter { section == "All" || $0.provider == section }.sorted { a, b in a.updated == b.updated ? a.title < b.title : a.updated > b.updated }
+            items = unique.values.filter { section == "All" || section == "Active" || $0.provider == section }.sorted { a, b in a.updated == b.updated ? a.title < b.title : a.updated > b.updated }
         }
+        if section != "Demo" {
+            items = items.map { item in
+                var row = item
+                if identity(row).origin != .fixture { row.state = liveState(row) }
+                return row
+            }
+        }
+        if section == "Active" { items = items.filter { $0.state == .running || $0.state == .needsInput } }
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return term.isEmpty ? items : items.filter { $0.title.localizedCaseInsensitiveContains(term) || $0.provider.localizedCaseInsensitiveContains(term) || $0.sessionID.localizedCaseInsensitiveContains(term) }
+    }
+
+    private var emptyMessage: String {
+        if library.loading && section != "ChatGPT" { return "Loading sessions…" }
+        if !query.isEmpty { return "No sessions match this search." }
+        switch section {
+        case "Active": return "No sessions currently report activity."
+        case "All", "ChatGPT": return "Find conversations on this Mac or import a ChatGPT export below."
+        default: return "No sessions here yet."
+        }
     }
 
     private func identity(_ row: LibraryItem) -> Identity {
@@ -151,7 +202,7 @@ struct SessionSettings: View {
             }.padding(10).background(.black.opacity(0.26), in: RoundedRectangle(cornerRadius: 10))
                 .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(mint.opacity(0.26)) }
             HStack(spacing: 3) {
-                ForEach(["All","ChatGPT","Codex","Pinned","Demo"], id: \.self) { tab in
+                ForEach(["All","Active","ChatGPT","Codex","Pinned","Demo"], id: \.self) { tab in
                     Button {
                         withAnimation(reduceMotion ? nil : .spring(response: 0.32,dampingFraction: 0.85)) { section = tab }
                     } label: {
@@ -176,7 +227,7 @@ struct SessionSettings: View {
             ScrollView {
                 LazyVStack(spacing: 5) {
                     if visibleRows.isEmpty {
-                        Text(library.loading && section != "ChatGPT" ? "Loading sessions…" : (query.isEmpty ? (section == "ChatGPT" || section == "All" ? "Find conversations on this Mac or import a ChatGPT export below." : "No sessions here yet.") : "No sessions match this search."))
+                        Text(emptyMessage)
                             .font(.callout).foregroundStyle(.secondary).padding(.vertical, 20)
                     }
                     ForEach(visibleRows) { row in
@@ -192,6 +243,13 @@ struct SessionSettings: View {
                                 Text(key.origin == .fixture ? "\(row.provider) · Demo" : (row.provider == "Codex" ? "Codex · Local session" : "ChatGPT · Conversation link")).font(.caption2).foregroundStyle(.secondary)
                             }
                             Spacer()
+                            if let status = row.state, status != .unavailable {
+                                let label = status == .needsInput ? "Needs input" : (status == .running ? "Active" : "Idle")
+                                let color = status == .needsInput ? Color.orange : (status == .running ? mint : .secondary)
+                                Label(label, systemImage: status == .running ? "waveform" : (status == .needsInput ? "hand.raised.fill" : "pause.circle"))
+                                    .font(.caption2.weight(.semibold)).foregroundStyle(color)
+                                    .padding(.horizontal, 6).padding(.vertical, 3).background(color.opacity(0.10), in: Capsule())
+                            }
                             Button {
                                 if pinned { store.unpin(key) }
                                 else if key.origin == .fixture || !["ChatGPT","Codex"].contains(row.provider) { store.pin(key) }
@@ -244,7 +302,13 @@ struct SessionSettings: View {
             RoundedRectangle(cornerRadius: 21).fill(LinearGradient(colors: [mint.opacity(0.13), .clear, lilac.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing))
         }
         .overlay { RoundedRectangle(cornerRadius: 21).strokeBorder(.white.opacity(0.18)) }
-        .task { await library.refresh() }
+        .task {
+            await library.refresh()
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+                await library.updateActivity()
+            }
+        }
     }
 
     private func chooseExport() {

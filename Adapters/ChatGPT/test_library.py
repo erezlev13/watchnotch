@@ -35,6 +35,18 @@ class LibraryTests(unittest.TestCase):
             self.assertEqual(rows[0]["title"], "A title")
             self.assertEqual(set(rows[0]), {"sessionID", "title", "updated", "provider"})
 
+    def test_catalog_reports_streaming_without_marking_unread_or_unknown_active(self):
+        with TemporaryDirectory() as root:
+            folder = Path(root) / "sqlite"
+            folder.mkdir()
+            with sqlite3.connect(folder / "codex.db") as db:
+                db.execute("CREATE TABLE local_thread_catalog(thread_id,display_title,source_updated_at,source_kind,missing_candidate,chatgpt_async_status)")
+                for value in [1, 2, 3, 4, 5, 6, 7, 99]:
+                    db.execute("INSERT INTO local_thread_catalog VALUES(?,?,0,'chatgpt',0,?)",
+                               (f"11111111-1111-4111-8111-{value:012d}", str(value), value))
+            self.assertEqual({r["title"] for r in desktop_items(Path(root)) if r.get("state") == "running"},
+                             {"1", "3", "5", "6", "7"})
+
     def test_browser_profiles_and_private_links(self):
         with TemporaryDirectory() as root:
             path = Path(root) / "Library/Application Support/Google/Chrome/Profile 3/History"

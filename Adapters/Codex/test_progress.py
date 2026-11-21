@@ -1,17 +1,22 @@
 import unittest
-from monitor import activity, read_snapshot
+from pathlib import Path
+import sqlite3
+import tempfile
+from monitor import activity, read_snapshot, thread_tokens
 
 
 class Server:
     def __init__(self):
         self.flag = []
         self.items = []
+        self.runtime = "active"
+        self.turn = "inProgress"
 
     def call(self, method, params):
         if method == "thread/read":
-            return {"thread": {"id": "sample", "name": "Layout fixes", "status": {"type": "active", "activeFlags": self.flag}}}
+            return {"thread": {"id": "sample", "name": "Layout fixes", "status": {"type": self.runtime, "activeFlags": self.flag}}}
         if method == "thread/turns/list":
-            return {"data": [{"id": "turn", "status": "inProgress"}]}
+            return {"data": [{"id": "turn", "status": self.turn}]}
         assert params["threadId"] == "sample" and params["turnId"] == "turn"
         return {"data": [{"item": x, "turnId": "turn"} for x in self.items]}
 
@@ -31,3 +36,31 @@ class ProgressTest(unittest.TestCase):
     def test_hidden_output(self):
         self.assertEqual(activity({"type": "agentMessage", "text": "hidden", "moderation": {"display": {"mode": "hide"}}}), "")
         self.assertEqual(activity({"type": "functionCallOutput", "output": "private"}), "")
+
+    def test_finished_gist_skips_acknowledgement_and_headings(self):
+        s = Server()
+        s.runtime, s.turn = "idle", "completed"
+        s.items = [{"type": "commandExecution", "command": "git diff", "status": "completed"},
+                   {"type": "agentMessage", "phase": "final_answer",
+                    "text": "Yes.\n\n## Result\nThe Windows build needs a different fix. More detail."}]
+        result = read_snapshot(s, "sample")
+        self.assertEqual(result["sentence"], "The Windows build needs a different fix.")
+        s.items[1]["text"] = "Yes."
+        self.assertEqual(read_snapshot(s, "sample")["sentence"], "Checked repository changes.")
+        s.items.pop(0)
+        self.assertEqual(read_snapshot(s, "sample")["sentence"], "Finished · Layout fixes.")
+        s.turn = "interrupted"
+        self.assertIn("interrupted", read_snapshot(s, "sample")["sentence"])
+
+    def test_live_gist_and_session_usage(self):
+        self.assertEqual(activity({"type": "agentMessage", "text": "Okay! I’m checking the Windows build."}), "Checking the Windows build.")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            db = sqlite3.connect(root / "state_5.sqlite")
+            db.execute("CREATE TABLE threads(id, tokens_used)")
+            db.executemany("INSERT INTO threads VALUES(?,?)", [("one", 2345), ("two", 913), ("new", 0)])
+            db.commit()
+            db.close()
+            self.assertEqual(thread_tokens("one", root), 2345)
+            self.assertIsNone(thread_tokens("absent", root))
+            self.assertIsNone(thread_tokens("new", root))
