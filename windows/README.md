@@ -24,6 +24,8 @@ Codex monitoring requires a native `codex.exe` with `app-server proxy` and an ex
 
 Pins and imported conversation titles, IDs and dates are stored in `%LOCALAPPDATA%\watchnotch\library.json`. Browser history is opened read-only. Conversation bodies from exports and observed Codex progress stay out of the saved library.
 
+Open **Account usage** on a Codex card to see the percentage used in each reported account window. The app reads the limits on demand. If the account supplies no percentages, the window displays **Account usage unavailable**.
+
 ## Verification and remaining parity work
 
 Run `py -3 -m unittest discover -s windows -v` from the repository root. The native window test pins a synthetic conversation through the library, exercises a mocked URL handoff, then removes the pin. The portable tests cover persistence, read-only discovery, imports, progress and reconnects.

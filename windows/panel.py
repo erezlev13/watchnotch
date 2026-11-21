@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from adapters.library import desktop_items, from_export, windows_browser_items
-from companion import Library, codex_library, from_link, poll
+from companion import Library, account_usage, codex_library, from_link, poll
 
 BG = "#13191e"
 CARD = "#212b32"
@@ -30,6 +30,8 @@ class Panel:
         self.jobs = set()
         self.events = Queue()
         self.dialog = None
+        self.usage_dialog = None
+        self.usage_text = tk.StringVar(root)
         self.expanded = False
         self.page = 0
         self.status = tk.StringVar(root)
@@ -155,7 +157,26 @@ class Panel:
                                              else "Checking the local Codex daemon…"), INK, ("Segoe UI", 10))]:
             tk.Label(frame, text=text, bg=CARD, fg=color, font=font, wraplength=225, anchor="w",
                      justify="left").pack(fill="x")
-        self.button(frame, "Jump in", lambda: self.jump(pin)).pack(anchor="w", pady=(6, 0))
+        actions = tk.Frame(frame, bg=CARD)
+        actions.pack(anchor="w", pady=(6, 0))
+        self.button(actions, "Jump in", lambda: self.jump(pin)).pack(side="left")
+        if pin.provider == "Codex":
+            self.button(actions, "Account usage", self.show_usage).pack(side="left")
+
+    def show_usage(self):
+        if self.usage_dialog is not None and self.usage_dialog.winfo_exists():
+            self.usage_dialog.lift()
+            return
+        dialog = self.usage_dialog = tk.Toplevel(self.root)
+        dialog.title("Codex account usage")
+        dialog.attributes("-topmost", True)
+        self.usage_text.set("Reading account limits…")
+        ttk.Label(dialog, textvariable=self.usage_text, padding=16, justify="left").pack()
+        ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=(0, 10))
+        def show(rows):
+            lines = [f"{row['label']}  {row['usedPercent']}% used" for row in rows]
+            self.usage_text.set("\n".join(lines) or "Account usage unavailable.")
+        self.job("Read account usage", account_usage, show)
 
     def jump(self, pin):
         try:

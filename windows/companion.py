@@ -6,12 +6,16 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from adapters.codex_client import Client, library_page, read_snapshot
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shared"))
+from account_usage import read_usage
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,14 @@ def connection(executable=None):
         except OSError:
             pass
         process.stdout.close()
+
+
+def account_usage():
+    try:
+        with connection() as server:
+            return read_usage(server)
+    except (OSError, RuntimeError, ValueError):
+        return []
 
 
 def codex_library():
