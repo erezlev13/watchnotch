@@ -32,9 +32,11 @@ private struct TileRowHeight: PreferenceKey {
 }
 
 struct PanelView: View {
+    private static let owl = Bundle.main.url(forResource: "watching-owl",withExtension: "png").flatMap { NSImage(contentsOf: $0) }
     @ObservedObject var store: Store
     @ObservedObject var panel: PanelState
     let toggle: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var source = "ChatGPT"
     @State private var link = ""
     @State private var title = ""
@@ -87,7 +89,20 @@ struct PanelView: View {
                                     SessionTile(card: card, store: store, panel: panel, index: index, width: width)
                                         .frame(width: width)
                                 }
-                            }.padding(.horizontal,16).padding(.top,4).padding(.bottom,16)
+                            }.padding(.top,17)
+                            .overlay(alignment: .topLeading) {
+                                if let owl = Self.owl, let watched = store.watchedSession, let index = store.pinned.firstIndex(where: { $0.id == watched }) {
+                                    Image(nsImage: owl)
+                                        .resizable().scaledToFill().frame(width: 42,height: 42)
+                                        .frame(width: 32,height: 28).clipShape(Capsule())
+                                        .overlay { Capsule().strokeBorder(.white.opacity(0.5),lineWidth: 1) }
+                                        .shadow(color: .black.opacity(0.3),radius: 2,y: 1)
+                                        .accessibilityLabel("Watching " + store.pinned[index].value.title)
+                                        .allowsHitTesting(false)
+                                        .offset(x: CGFloat(index) * (width + gap) + width - 58)
+                                        .animation(reduceMotion ? nil : .spring(response: 0.48,dampingFraction: 0.82),value: index)
+                                }
+                            }.padding(.horizontal,16).padding(.bottom,16)
                             .background { GeometryReader { bounds in
                                 Color.clear.preference(key: TileRowHeight.self,value: bounds.size.height)
                             } }
@@ -177,6 +192,7 @@ private struct SessionTile: View {
                 Image(systemName: card.value.provider == "Codex" ? "terminal" : "bubble.left")
                 Text(card.value.provider).fontWeight(.semibold)
                 if card.origin == .fixture { Text("· Demo").foregroundStyle(.white.opacity(0.65)) }
+                else if card.value.state != .unavailable { Text("· Live").foregroundStyle(accent) }
                 Spacer(minLength: 2)
                 ActivityMark(state: card.value.state,tint: card.tint)
                 Text(stateName).foregroundStyle(card.tint)

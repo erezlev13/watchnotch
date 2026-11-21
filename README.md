@@ -4,7 +4,7 @@
 
 [Website and Mac download](https://erezlev13.github.io/watchnotch/)
 
-A local macOS app for following up to five selected Codex and ChatGPT sessions. Click the strip by the camera or use the menu bar item to expand it. Floating tiles span the display with transparent space between them. Each tile types its updated status in white and shows its own pending decision or result. Reduce Motion displays new sentences immediately. On a narrow display, scroll the row horizontally.
+A local macOS app for following up to five selected Codex and ChatGPT sessions. Click the strip by the camera or use the menu bar item to expand it. The owl perches on the pinned live session with the latest status update. When only demo activity is available, it follows the demo. Saved ChatGPT links do not report live activity. Floating tiles span the display with transparent space between them. Each tile types its updated status in white and shows its own pending decision or result. Reduce Motion displays new sentences immediately. On a narrow display, scroll the row horizontally.
 
 ![Three horizontal session cards with a live Codex turn, a saved ChatGPT link and a demo approval](Demo/mixed-sessions.png)
 

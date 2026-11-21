@@ -42,6 +42,17 @@ final class Store: ObservableObject {
     }
 
     var pinned: [Card] { saved.pins.compactMap { cards[$0] } }
+    var watchedSession: Identity? {
+        // A replayed demo must never take attention away from a connected session.
+        let eligible = pinned.filter { $0.value.state != .unavailable }
+        let connected = eligible.filter { $0.origin == .adapter && $0.source != nil }
+        let candidates = connected.isEmpty ? eligible.filter { $0.origin == .fixture } : connected
+        return candidates.reduce(nil as Card?) { latest, card in
+            guard let latest else { return card }
+            return card.value.updatedAt > latest.value.updatedAt ? card : latest
+        }?.id
+    }
+
     var catalog: [Card] {
         cards.values.sorted { a, b in
             if a.origin != b.origin { return a.origin.rawValue < b.origin.rawValue }

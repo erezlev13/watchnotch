@@ -94,3 +94,36 @@ check(SessionJump(card: Card(value: local,origin: .adapter),pairedWebLink: cloud
 check(SessionJump(card: Card(value: local,origin: .adapter))!.steps(providerRunning: false) == [.desktop(nativeURL)],"local-only UUID must open its own native thread")
 check(SessionJump.webLink("https://unrelated.example/codex/tasks/task_123") == nil,"unexpected web destination")
 print("PASS  Exact-session desktop routing, browser fallback, offline, local-only, and fixture handling")
+
+let owlRoot = root.appendingPathComponent("owl-test")
+let owlDir = owlRoot.appendingPathComponent("Sessions")
+let owlStore = Store(root: owlRoot,directory: owlDir,ticking: false)
+let demoPins = owlStore.pinned.map(\.id)
+let clock = Date()
+check(owlStore.watchedSession == demoPins[0],"equal timestamps must keep stable pin order")
+owlStore.tick(now: clock.addingTimeInterval(5))
+owlStore.tick(now: clock.addingTimeInterval(10))
+check(owlStore.watchedSession == demoPins[1],"owl did not follow new demo activity")
+
+func publishActivity(_ key: String, at time: Date, state: SessionState = .running) throws -> Identity {
+    let sample = Snapshot(provider: "Codex",sessionID: key,title: "Same title",sentence: "The task is running.",state: state,updatedAt: time)
+    try Format.encoder().encode(sample).write(to: owlDir.appendingPathComponent(key + ".json"),options: .atomic)
+    owlStore.tick()
+    let id = Identity(origin: .adapter,provider: "Codex",sessionID: key)
+    owlStore.pin(id)
+    return id
+}
+let first = try publishActivity("first",at: clock)
+let second = try publishActivity("second",at: clock.addingTimeInterval(2))
+check(owlStore.watchedSession == second,"demo or older live session took focus")
+_ = try publishActivity("first",at: clock.addingTimeInterval(3),state: .needsInput)
+check(owlStore.watchedSession == first,"newer event failed to move the owl")
+owlStore.tick()
+check(owlStore.watchedSession == first,"quiet poll moved the owl")
+_ = try publishActivity("first",at: clock.addingTimeInterval(4),state: .unavailable)
+check(owlStore.watchedSession == second,"disconnected session kept the owl")
+for id in demoPins + [second] { owlStore.unpin(id) }
+check(owlStore.watchedSession == nil,"offline card attracted the owl")
+_ = owlStore.addChat("https://chatgpt.com/c/" + UUID().uuidString,title: "Saved conversation")
+check(owlStore.watchedSession == nil,"bookmark reported activity")
+print("PASS  Owl follows the latest pinned active session, prefers live updates and ignores bookmarks and quiet polls")
