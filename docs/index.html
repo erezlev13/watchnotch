@@ -12,6 +12,7 @@
   <title>watchnotch — All your AI sessions, one clear view</title>
   <link rel="icon" type="image/png" href="media/owl-small.png">
   <link rel="stylesheet" href="style.css">
+  <script src="tour.js" defer></script>
 </head>
 <body>
 <header>
@@ -23,12 +24,48 @@
     <div class="herocopy">
       <h1>More AI sessions.<br><em>Less switching.</em></h1>
       <div class="intro">
-        <p>Keep up with your AI conversations while you research, write, learn, plan or code. Pin up to five independent sessions, see what changed and what needs you, and jump back in without hunting through windows.</p><p class="hero-availability"><strong>Available for macOS and Windows.</strong> Mac has a downloadable preview; Windows has a source-run preview. Features vary by platform and provider. More AI integrations are on the roadmap.</p>
+        <p>Keep up with your AI conversations while you research, write, learn, plan or code. Pin up to five independent sessions, see what changed and what needs you, and jump back in without hunting through windows.</p><p class="hero-availability"><strong>Available for macOS and Windows.</strong> Download the Mac preview to follow Codex and ChatGPT, or run the Windows preview from source.</p>
         <div class="actions"><a class="download" href="https://github.com/erezlev13/watchnotch/releases/download/v0.1.7/watchnotch-mac-arm64.zip">Download for Mac <span aria-hidden="true">↓</span></a><a class="download download-alt" href="https://github.com/erezlev13/watchnotch/blob/main/windows/README.md#run">Run on Windows <span aria-hidden="true">↗</span></a><a class="watch" href="#tour">Watch the demo</a></div>
         <small>Mac: Apple silicon · macOS 13+ · Preview 0.1.7 &nbsp;|&nbsp; Windows: Python 3.9+ source preview</small>
       </div>
     </div>
     <img class="owl" src="media/watchnotch-owl.png" alt="The brown watchnotch owl looking up" width="1254" height="1254">
+  </section>
+
+  <section id="tour" aria-labelledby="tour-title">
+    <div class="section-heading"><h2 id="tour-title">Inside the notch.</h2><span>Mac feature film · 1 min 14 sec</span></div>
+    <div class="tour-intro"><h3>When does a job need you?</h3>
+      <p>The film opens with a pinned Claude Code job asking for permission. When the job goes offline, its tile keeps the last report so you can tell when it needed input. This is part of the Mac development preview.</p>
+    </div>
+    <figure class="demo-preview">
+      <video id="film" width="1280" height="720" controls playsinline preload="metadata" poster="media/feature-tour.jpg" aria-label="WatchNotch Mac feature film" aria-describedby="film-caption">
+        <source src="media/feature-tour.mp4" type="video/mp4">
+        <track kind="captions" src="media/feature-tour.vtt" srclang="en" label="English descriptions">
+      </video>
+      <figcaption id="film-caption">Example sessions from the Mac download, the source build and the development preview. Each scene identifies its build. <a href="media/feature-tour.mp4" download>Download the film</a></figcaption>
+    </figure>
+    <div class="film-alternative" id="film-error" hidden>
+      <img src="media/claude-saved-job.webp" alt="The pinned Gallery layout job shows Offline and says Claude Code last reported that it needed input." loading="lazy" width="660" height="419">
+      <p>The film couldn’t play here. Read the scene descriptions below or open the downloaded film in a video player.</p>
+    </div>
+    <nav class="chapters" aria-label="Film chapters">
+      <a href="media/feature-tour.mp4#t=0"><time datetime="PT0S">0:00</time> Live and saved jobs</a>
+      <a href="media/feature-tour.mp4#t=10"><time datetime="PT10S">0:10</time> Pins and updates</a>
+      <a href="media/feature-tour.mp4#t=22"><time datetime="PT22S">0:22</time> Questions and approvals</a>
+      <a href="media/feature-tour.mp4#t=34"><time datetime="PT34S">0:34</time> Replies and screenshots</a>
+      <a href="media/feature-tour.mp4#t=54"><time datetime="PT54S">0:54</time> Claude sessions</a>
+      <a href="media/feature-tour.mp4#t=61"><time datetime="PT61S">1:01</time> Session controls</a>
+    </nav>
+    <details class="transcript"><summary>Read the scene descriptions</summary>
+      <ol>
+        <li><strong>Live and saved jobs.</strong> In the development preview, a pinned Claude Code job shows Needs input. When the CLI reports only a saved job, the tile shows Offline and explains what Claude Code last reported.</li>
+        <li><strong>Pins and updates.</strong> In Mac preview 0.1.7, pin a conversation from the library. A working Codex subagent appears below its parent, and the status changes when the layout checks pass.</li>
+        <li><strong>Questions and approvals.</strong> In the Mac source build, choose a gallery layout in the tile, then review a separate request to save the preview.</li>
+        <li><strong>Replies and screenshots.</strong> Send a follow-up to an open ChatGPT conversation from the Mac source build. The development preview also shows the last observed reply, queues a follow-up when ChatGPT offers Queue, and sends a screenshot with a caption to Codex.</li>
+        <li><strong>Claude sessions.</strong> In the development preview, open a pinned Claude Desktop chat or copy the command to attach to a Claude Code background job in its project terminal.</li>
+        <li><strong>Session controls.</strong> The development preview offers to archive a Codex thread or stop an active ChatGPT response. Enable Automatically show active sessions to bring working and waiting sessions alongside your pins.</li>
+      </ol>
+    </details>
   </section>
 
   <section id="everyone" class="for-everyone" aria-labelledby="everyone-title">
@@ -40,18 +77,7 @@
       <article><small>Create</small><h3>Writing &amp; creativity</h3><p>Move between drafts, brainstorming sessions and feedback.</p></article>
       <article><small>Build</small><h3>Development &amp; agents</h3><p>Track coding tasks and approvals alongside your other AI conversations.</p></article>
     </div>
-    <p class="provider-note"><strong>All providers is the direction, not a claim about today's build.</strong> Existing support varies by app and version. The current Mac preview centers on Codex and ChatGPT; Claude is in development. We plan to investigate Qwen, Kimi, DeepSeek, MiniMax and more. <a href="https://github.com/erezlev13/watchnotch/blob/main/docs/PRODUCT_VISION.md">Read the product vision and provider roadmap</a>.</p>
-  </section>
-
-  <section id="tour" aria-labelledby="tour-title">
-    <div class="section-heading"><h2 id="tour-title">Watch WatchNotch in action.</h2><span>Animated Mac preview</span></div>
-    <figure class="demo-preview">
-      <picture>
-        <source media="(prefers-reduced-motion: reduce)" srcset="media/sessions.png">
-        <img src="media/sessions.gif" width="900" height="480" loading="lazy" decoding="async" alt="Animated preview of independent WatchNotch AI session cards showing their status at a glance.">
-      </picture>
-      <figcaption>Illustrative preview · Features vary by build.</figcaption>
-    </figure>
+    <p class="provider-note"><strong>Provider support varies by build.</strong> The Mac download supports Codex and ChatGPT. The development preview adds Claude Desktop chats and local Claude Code jobs. We plan to investigate Qwen, Kimi, DeepSeek, MiniMax and more. <a href="https://github.com/erezlev13/watchnotch/blob/main/docs/PRODUCT_VISION.md">Read the product vision and provider roadmap</a>.</p>
   </section>
 
   <section class="library-tour" aria-labelledby="library-title">
@@ -97,7 +123,7 @@
     </details>
     <details><summary>Follow Claude Desktop and Claude Code</summary>
       <p><strong>In development on Mac and Windows.</strong> Pin a private Claude Desktop chat link and use <strong>Jump in</strong> or <strong>Copy &amp; open</strong>. On Mac, choose <strong>Enable Claude Desktop activity…</strong> and grant Accessibility access to see activity in an open chat. Windows keeps the conversation as a saved link. On Mac, <strong>Jump in</strong> was verified to reopen the exact chat on a free Claude Desktop account. The live <strong>Working</strong> to <strong>Ready</strong> transition still awaits an end-to-end check.</p>
-      <p>Claude Code sessions come from the local CLI’s agent list. In local preview <code>1f0dd9d</code>, a saved background job appears unavailable when the CLI supplies neither a process ID nor live status. Its description can still show that it last needed input or was working. With automatic display enabled on Mac, active Claude Code sessions can appear without a manual pin. Follow a session’s status and use <strong>Copy attach command</strong> for a background job or <strong>Copy resume command</strong> to continue in the project terminal. Review permissions in Claude Code.</p>
+      <p>Claude Code sessions come from the local CLI’s agent list. In the tested development preview (<code>1f0dd9d</code>), a pinned Mac tile shows <strong>Offline</strong> when a saved background job has neither a process ID nor live status. Its description preserves the last report of work in progress or a request for input. With automatic display enabled on Mac, active Claude Code sessions can appear without a manual pin. Follow a session’s status and use <strong>Copy attach command</strong> for a background job or <strong>Copy resume command</strong> to continue in the project terminal. Review permissions in Claude Code.</p>
     </details>
     <details><summary>Show active sessions and control a turn</summary>
       <p><strong>In development on Mac.</strong> Enable <strong>Automatically show active sessions</strong> to bring working and waiting sessions into the strip. They leave when idle. Your pins keep their order. Choose <strong>+</strong> to start a fresh Codex, ChatGPT or ChatGPT Work session.</p>

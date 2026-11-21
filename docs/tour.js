@@ -6,65 +6,60 @@ const chapters = Array.from(document.querySelectorAll(".chapters a"), link => ({
 }));
 
 let requestedSeek = null;
-let playbackCheck = null;
-let didFail = false;
+let playbackCheck;
 
-function showFilmFallback() {
-  if (didFail) return;
-  didFail = true;
-  fallback.hidden = false;
+function stopPlaybackCheck() {
   clearTimeout(playbackCheck);
 }
 
-function seekToChapter(seconds) {
-  if (film.readyState < HTMLMediaElement.HAVE_METADATA) {
-    requestedSeek = seconds;
-    return;
-  }
-  if (Number.isFinite(film.duration) && film.duration > 0) {
-    try {
-      film.currentTime = Math.min(seconds, Math.max(0, film.duration - 0.1));
-    } catch {
-      showFilmFallback();
-    }
-  }
+function showFallback() {
+  fallback.hidden = false;
+  stopPlaybackCheck();
+}
+
+function checkProgress() {
+  stopPlaybackCheck();
+  const position = film.currentTime;
+  playbackCheck = setTimeout(() => {
+    if (!film.paused && film.currentTime === position) showFallback();
+  }, 10000);
 }
 
 for (const { link, start } of chapters) {
   link.addEventListener("click", event => {
     if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    if (!film.canPlayType("video/mp4")) return;
+    if (film.error || !film.canPlayType("video/mp4")) return;
     event.preventDefault();
-    seekToChapter(start);
-    film.play().catch(showFilmFallback);
+    film.scrollIntoView({ block: "center", behavior: "instant" });
+    if (film.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      film.currentTime = start;
+    } else {
+      requestedSeek = start;
+    }
+    film.play().catch(error => {
+      if (error.name !== "AbortError") showFallback();
+    });
   });
 }
 
-// Give mobile browsers a chance to fetch metadata before seeking.
-// If the media is unreadable or playback never begins, offer a working GIF fallback.
 film.addEventListener("loadedmetadata", () => {
   if (!Number.isFinite(film.duration) || film.duration <= 0) {
-    showFilmFallback();
-    return;
-  }
-  if (requestedSeek !== null) {
-    seekToChapter(requestedSeek);
+    showFallback();
+  } else if (requestedSeek !== null) {
+    film.currentTime = requestedSeek;
     requestedSeek = null;
   }
 });
-film.addEventListener("error", showFilmFallback);
-film.querySelector("source")?.addEventListener("error", showFilmFallback);
-film.addEventListener("play", () => {
-  clearTimeout(playbackCheck);
-  playbackCheck = setTimeout(() => {
-    if (film.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || film.currentTime <= 0) {
-      showFilmFallback();
-    }
-  }, 10000);
-});
-film.addEventListener("playing", () => clearTimeout(playbackCheck));
+film.addEventListener("error", showFallback);
+film.querySelector("source").addEventListener("error", showFallback);
+film.addEventListener("play", checkProgress);
+film.addEventListener("waiting", checkProgress);
+film.addEventListener("pause", stopPlaybackCheck);
+film.addEventListener("ended", stopPlaybackCheck);
 film.addEventListener("timeupdate", () => {
-  if (film.currentTime > 0) clearTimeout(playbackCheck);
+  if (!film.paused && !film.seeking && film.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+    fallback.hidden = true;
+  }
   for (let i = 0; i < chapters.length; i++) {
     const { link, start } = chapters[i];
     const end = chapters[i + 1]?.start ?? Infinity;
@@ -76,4 +71,6 @@ film.addEventListener("timeupdate", () => {
   }
 });
 
-if (!film.canPlayType("video/mp4")) showFilmFallback();
+if (film.error || film.networkState === HTMLMediaElement.NETWORK_NO_SOURCE || !film.canPlayType("video/mp4")) {
+  showFallback();
+}

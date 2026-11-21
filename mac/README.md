@@ -12,7 +12,7 @@ A subagent appears inside its pinned parent while working or waiting for input a
 
 The public 0.1.7 download includes queued summaries and active subagent tiles. The source build also keeps quiet ChatGPT conversations connected and restores monitoring when the desktop app reopens. [Watch three queued updates](../docs/media/vertical-summary.gif)
 
-[Watch the 64-second feature film](https://erezlev13.github.io/watchnotch/#tour) for a walkthrough of the download, public source build and features in development. The film uses example conversations.
+[Watch the 74-second feature film](https://erezlev13.github.io/watchnotch/#tour) for a walkthrough of the download, public source build and features in development. The film uses example conversations.
 
 ## Build and open
 
