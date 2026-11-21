@@ -44,3 +44,7 @@ The feature film opens with a live Claude Code job and its saved, offline state 
 - **Session controls on Mac.** Use **+** to open a new Codex, ChatGPT or ChatGPT Work composer. **Automatically show active sessions** temporarily adds working or waiting threads alongside your pins. **End session** offers to archive a Codex thread. **Stop response** stops a supported desktop ChatGPT turn and keeps the conversation available.
 
 For provider behavior, connection options and verification details, see the [Codex adapter guide](mac/Adapters/Codex/README.md) and the [ChatGPT desktop guide](mac/Adapters/ChatGPT/README.md).
+
+## License
+
+WatchNotch is open source under the [MIT License](LICENSE). Copyright © 2026 Erez Lev.
