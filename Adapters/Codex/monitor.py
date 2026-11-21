@@ -21,6 +21,12 @@ import tempfile
 import time
 import uuid
 
+# The bundled application launches this file with Python's isolated path mode.
+sys.dont_write_bytecode = True
+if sys.flags.isolated:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from requests_bridge import LiveRequests, take_decision
+
 
 def thread_id(value):
     prefix = "codex://threads/"
@@ -47,8 +53,9 @@ class RPCRejected(RuntimeError):
 
 class Server:
     """JSON-RPC over the local Codex Unix WebSocket control endpoint."""
-    def __init__(self, path=None):
+    def __init__(self, path=None, interactions=None):
         self.path = path or default_socket()
+        self.interactions = interactions
 
     def __enter__(self):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -80,8 +87,10 @@ class Server:
             expected = base64.b64encode(hashlib.sha1(signature.encode()).digest())
             if headers.get(b"sec-websocket-accept") != expected:
                 raise ConnectionError("Invalid WebSocket upgrade response.")
-            self.call("initialize", {"clientInfo": {"name": "notch_companion",
-                      "title": "Mac Notch Session Companion", "version": "1.0"}})
+            init = {"clientInfo": {"name": "notch_companion", "title": "Mac Notch Session Companion", "version": "1.0"}}
+            if self.interactions:
+                init["capabilities"] = {"experimentalApi": True, "requiredHumanApproval": True}
+            self.call("initialize", init)
             self.send_frame(1, b'{"method":"initialized","params":{}}')
         except BaseException:
             self.__exit__(None, None, None)
@@ -138,6 +147,8 @@ class Server:
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
             message = self.read_message()
+            if self.interactions and "method" in message:
+                self.interactions.receive(message)
             if message.get("id") == key and "method" not in message:
                 if "error" in message:
                     raise RPCRejected(f"{method} failed (RPC {message['error'].get('code')}).")
@@ -277,18 +288,33 @@ def activity(item):
 
 def recent_progress(server, key, cache):
     turn = None
+    live = getattr(server, "interactions", None)
     try:
         turns = server.call("thread/turns/list", {"threadId": key, "limit": 1,
                             "sortDirection": "desc", "itemsView": "notLoaded"})["data"]
         if not turns:
+            if live:
+                live.reset_history()
             return None, ""
         turn = turns[0]
         cache_key = (turn["id"], turn["status"])
         page = server.call("thread/items/list", {"threadId": key, "turnId": turn["id"], "limit": 12,
                            "sortDirection": "desc", "deferOutput": {}})
     except RuntimeError:
+        if live:
+            live.reset_history()
         return (turn["status"], cache.get(cache_key, "")) if turn else (None, "")
     items = [entry.get("item") or {} for entry in page["data"] if entry.get("turnId") == turn["id"]]
+    if live:
+        def older_pages():
+            cursor, seen = page.get("nextCursor"), set()
+            while cursor and cursor not in seen:
+                seen.add(cursor)
+                old = server.call("thread/items/list", {"threadId": key, "turnId": turn["id"], "cursor": cursor,
+                                  "limit": 100, "sortDirection": "desc", "deferOutput": {}})
+                yield [entry.get("item") or {} for entry in old["data"] if entry.get("turnId") == turn["id"]]
+                cursor = old.get("nextCursor")
+        live.observe_items(turn["id"], turn["status"], items, older_pages)
     completed = turn["status"] == "completed"
     if completed:
         items.sort(key=lambda item: item.get("type") == "agentMessage" and item.get("phase") == "final_answer", reverse=True)
@@ -335,6 +361,20 @@ def read_snapshot(server, key, link=None, cache=None):
         raise RuntimeError(f"The local Codex daemon could not read this thread ({error}).") from error
     if thread["id"] != key:
         raise RuntimeError("Codex returned a different thread identity.")
+    live = getattr(server, "interactions", None)
+    runtime = thread["status"]["type"]
+    if live and runtime == "active" and not live.subscribed:
+        # Rejoin an already running pinned thread to receive the actual callbacks.
+        # Do not load a sleeping thread or supply any settings overrides.
+        try:
+            resumed = server.call("thread/resume", {"threadId": key, "excludeTurns": True})
+            if resumed["thread"]["id"] != key:
+                raise RuntimeError("Codex resumed a different thread.")
+        except RPCRejected:
+            pass  # Some daemons cannot resume ephemeral threads; retain item-based observation.
+        live.subscribed = True
+    elif live and runtime == "notLoaded":
+        live.subscribed = False
     state, sentence = status(thread)
     title = short_text(thread.get("name"), None) or "Codex session"
     last, line = recent_progress(server, key, cache if cache is not None else {})
@@ -358,6 +398,8 @@ def read_snapshot(server, key, link=None, cache=None):
               "state": state, "sentence": sentence}
     result["details"] = {"model": thread.get("model"), "effort": thread.get("reasoningEffort"),
                          "tokens": thread_tokens(key)}
+    if live:
+        live.decorate(result, runtime, last)
     if link:
         result["sessionURL"] = link
     return result
@@ -398,9 +440,17 @@ def watch(key, link, socket, directory):
         try:
             while True:
                 try:
-                    with Server(socket) as server:
+                    live = LiveRequests(key)
+                    with Server(socket, live) as server:
                         while True:
                             current = read_snapshot(server, key, link, cache)
+                            decision = take_decision(path)
+                            if decision:
+                                try:
+                                    live.respond(server, decision)
+                                except RPCRejected:
+                                    live.feedback = "Codex declined this selection. Open the session to review it."
+                                current = read_snapshot(server, key, link, cache)
                             if current != previous:
                                 publish(path, current)
                                 previous = current
@@ -409,6 +459,9 @@ def watch(key, link, socket, directory):
                     if previous is None:
                         raise
                     offline = dict(previous, state="unavailable")
+                    offline.pop("request", None)
+                    if live.sent and "request" in previous:
+                        offline["sentence"] = "The connection closed. Open the session to check your selection."
                     if offline != previous:
                         publish(path, offline)
                         previous = offline
@@ -416,7 +469,9 @@ def watch(key, link, socket, directory):
                     time.sleep(3)
         finally:
             if previous and previous["state"] != "unavailable":
-                publish(path, dict(previous, state="unavailable"))
+                offline = dict(previous, state="unavailable")
+                offline.pop("request", None)
+                publish(path, offline)
 
 
 BRANCH_SOURCES = ["cli", "vscode", "appServer", "exec", "subAgent", "subAgentThreadSpawn", "unknown"]
