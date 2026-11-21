@@ -141,6 +141,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 umask(0o077)
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
+if CommandLine.arguments.dropFirst().first == "--check-desktop-composer" {
+    guard CommandLine.arguments.count == 3, let (_, url) = Format.chatLink(CommandLine.arguments[2]) else { exit(2) }
+    Task { @MainActor in
+        print(DesktopChatReply(target: url)?.checkOpenComposer() ?? "ChatGPT desktop is closed")
+        exit(0)
+    }
+    app.run()
+    exit(0)
+}
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

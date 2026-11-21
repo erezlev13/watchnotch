@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from monitor import read_snapshot
 from requests_bridge import LiveRequests, take_decision
@@ -151,9 +152,14 @@ class InteractiveTests(unittest.TestCase):
             self.assertIsNone(take_decision(snapshot))
             inbox.write_bytes(b" " * 65537)
             self.assertIsNone(take_decision(snapshot))
-            inbox.write_text("{}")
-            os.chmod(inbox,0o666)
-            self.assertIsNone(take_decision(snapshot))
+            for write_bit in (0o020, 0o002):
+                with self.subTest(write_bit=write_bit):
+                    inbox.write_text("{}")
+                    fields = list(inbox.stat())
+                    fields[0] |= write_bit
+                    with patch("requests_bridge.os.fstat", return_value=os.stat_result(fields)):
+                        self.assertIsNone(take_decision(snapshot))
+                    self.assertFalse(inbox.exists())
             snapshot.write_text("untouched")
             inbox.symlink_to(snapshot)
             self.assertIsNone(take_decision(snapshot))

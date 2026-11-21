@@ -133,7 +133,7 @@ struct SessionJump {
         return Format.chatLink("https://chatgpt.com" + path)?.1
     }
 
-    private static func attribute(_ node: AXUIElement, _ name: String) -> CFTypeRef? {
+    static func attribute(_ node: AXUIElement, _ name: String) -> CFTypeRef? {
         var result: CFTypeRef?
         guard AXUIElementCopyAttributeValue(node, name as CFString, &result) == .success else { return nil }
         return result
@@ -141,7 +141,7 @@ struct SessionJump {
 
     // Only select a conversation inside the app's own window, sidebar or tab list.
     // A link in a message is never a navigation target.
-    @MainActor private static func selectChat(_ target: URL, title: String?, in app: NSRunningApplication) -> Bool {
+    @MainActor static func selectChat(_ target: URL, title: String?, in app: NSRunningApplication) -> Bool {
         let application = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(application, 0.15)
         _ = AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
