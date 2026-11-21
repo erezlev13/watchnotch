@@ -2,13 +2,15 @@
 
 ![watchnotch owl](../docs/media/owl-small.png)
 
-[Website and Mac download](https://erezlev13.github.io/watchnotch/)
+[Mac preview 0.1.7](https://github.com/erezlev13/watchnotch/releases/tag/v0.1.7) · [Website](https://erezlev13.github.io/watchnotch/)
 
-Watch selected ChatGPT Chat and Work conversations and Codex threads from the notch on your Mac. Click the strip by the camera or use the menu bar item to expand the pinned row. The owl follows the latest live update. Each tile types one short status in white and grows vertically to show the whole sentence. Typing slows at punctuation. Click the summary to reveal it immediately, or enable Reduce Motion to show every update in full.
+Watch selected ChatGPT Chat and Work conversations and Codex threads from the notch on your Mac. Click the strip by the camera or use the menu bar item to expand the pinned row. The owl follows the latest live update. Each tile shows one sentence about progress, a result, or what needs your attention. Its lines appear from top to bottom. An arriving update waits for the current sentence to finish and gives you time to read it. Click the sentence to reveal it immediately, or enable Reduce Motion to see it in full.
 
 A subagent appears inside its pinned parent while working or waiting for input and disappears when its turn ends. Click a subagent or fork to open its thread. Each pinned tile is at most 300 points wide. Your display determines how many fit. On a smaller screen, scroll horizontally to reach existing pins.
 
 ![Two example Mac tiles with a wrapped Codex build summary, a direct reply field and a ChatGPT Work draft field](../docs/media/reply-tiles.png)
+
+The public 0.1.7 download includes queued summaries and active subagent tiles. The source build also keeps quiet ChatGPT conversations connected and restores monitoring when the desktop app reopens. [Watch three queued updates](../docs/media/vertical-summary.gif)
 
 ## Build and open
 
