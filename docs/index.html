@@ -38,34 +38,15 @@
       <p>The film opens with a pinned Claude Code job asking for permission. When the job goes offline, its tile keeps the last report so you can tell when it needed input. This is part of the Mac development preview.</p>
     </div>
     <figure class="demo-preview">
-      <video id="film" width="1280" height="720" controls playsinline preload="metadata" poster="media/feature-tour.jpg" aria-label="WatchNotch Mac feature film" aria-describedby="film-caption">
+      <video id="film" width="1280" height="720" controls playsinline preload="metadata" poster="media/feature-tour.jpg" aria-label="WatchNotch Mac feature film">
         <source src="media/feature-tour.mp4" type="video/mp4">
         <track kind="captions" src="media/feature-tour.vtt" srclang="en" label="English descriptions">
       </video>
-      <figcaption id="film-caption">Example sessions from the Mac download, the source build and the development preview. Each scene identifies its build. <a href="media/feature-tour.mp4" download>Download the film</a></figcaption>
     </figure>
     <div class="film-alternative" id="film-error" hidden>
       <img src="media/claude-saved-job.webp" alt="The pinned Gallery layout job shows Offline and says Claude Code last reported that it needed input." loading="lazy" width="660" height="419">
-      <p>The film couldn’t play here. Read the scene descriptions below or open the downloaded film in a video player.</p>
+      <p>The film couldn’t play here. <a href="media/feature-tour.mp4">Open the video file</a>.</p>
     </div>
-    <nav class="chapters" aria-label="Film chapters">
-      <a href="media/feature-tour.mp4#t=0"><time datetime="PT0S">0:00</time> Live and saved jobs</a>
-      <a href="media/feature-tour.mp4#t=10"><time datetime="PT10S">0:10</time> Pins and updates</a>
-      <a href="media/feature-tour.mp4#t=22"><time datetime="PT22S">0:22</time> Questions and approvals</a>
-      <a href="media/feature-tour.mp4#t=34"><time datetime="PT34S">0:34</time> Replies and screenshots</a>
-      <a href="media/feature-tour.mp4#t=54"><time datetime="PT54S">0:54</time> Claude sessions</a>
-      <a href="media/feature-tour.mp4#t=61"><time datetime="PT61S">1:01</time> Session controls</a>
-    </nav>
-    <details class="transcript"><summary>Read the scene descriptions</summary>
-      <ol>
-        <li><strong>Live and saved jobs.</strong> In the development preview, a pinned Claude Code job shows Needs input. When the CLI reports only a saved job, the tile shows Offline and explains what Claude Code last reported.</li>
-        <li><strong>Pins and updates.</strong> In Mac preview 0.1.7, pin a conversation from the library. A working Codex subagent appears below its parent, and the status changes when the layout checks pass.</li>
-        <li><strong>Questions and approvals.</strong> In the Mac source build, choose a gallery layout in the tile, then review a separate request to save the preview.</li>
-        <li><strong>Replies and screenshots.</strong> Send a follow-up to an open ChatGPT conversation from the Mac source build. The development preview also shows the last observed reply, queues a follow-up when ChatGPT offers Queue, and sends a screenshot with a caption to Codex.</li>
-        <li><strong>Claude sessions.</strong> In the development preview, open a pinned Claude Desktop chat or copy the command to attach to a Claude Code background job in its project terminal.</li>
-        <li><strong>Session controls.</strong> The development preview offers to archive a Codex thread or stop an active ChatGPT response. Enable Automatically show active sessions to bring working and waiting sessions alongside your pins.</li>
-      </ol>
-    </details>
   </section>
 
   <section id="everyone" class="for-everyone" aria-labelledby="everyone-title">
