@@ -49,10 +49,12 @@ class Server:
         self.reader = self.sock.makefile("rb")
         self.next_id = 1
         try:
-            info = os.lstat(self.path)
+            # Codex publishes a symlink into its per-user daemon directory.
+            endpoint = Path(self.path).resolve(strict=True)
+            info = endpoint.stat()
             if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
                 raise PermissionError("Expected a Codex socket owned by the current user.")
-            self.sock.connect(str(self.path))
+            self.sock.connect(str(endpoint))
             nonce = base64.b64encode(os.urandom(16)).decode()
             self.sock.sendall(("GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
                 "Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"

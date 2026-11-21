@@ -49,7 +49,7 @@ final class Store: ObservableObject {
         let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         var info = stat()
         guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
-              info.st_uid == geteuid(), info.st_size <= limit else { throw CocoaError(.fileReadCorruptFile) }
+              info.st_uid == geteuid(), info.st_mode & 0o022 == 0, info.st_size <= limit else { throw CocoaError(.fileReadCorruptFile) }
         var data = Data()
         while let chunk = try handle.read(upToCount: min(65536, limit + 1 - data.count)), !chunk.isEmpty {
             data.append(chunk)
